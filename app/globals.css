@@ -198,7 +198,7 @@ button { cursor: pointer; }
 .admin-card p { color: #718197; font-size: .8rem; }
 .settings-layout { display: grid; grid-template-columns: 230px 1fr; gap: 24px; }
 .logo-manager { display: flex; flex-direction: column; gap: 11px; }
-.logo-preview { display: grid; aspect-ratio: 4 / 3; place-items: center; overflow: hidden; border: 1px dashed #9ab5ca; border-radius: 12px; background: #f4f8fb; }
+.logo-preview { display: grid; aspect-ratio: 2.53 / 1; place-items: center; overflow: hidden; border: 1px solid #cbd9e5; border-radius: 12px; background: #fff; }
 .logo-preview img { width: 100%; height: 100%; object-fit: contain; }
 .file-button { display: flex; min-height: 42px; align-items: center; justify-content: center; gap: 8px; border-radius: 10px; background: #0f4c81; color: #fff; cursor: pointer; }
 .file-button svg { width: 17px; }
@@ -270,8 +270,7 @@ button { cursor: pointer; }
 .preview-toolbar span { color: #718197; font-size: .74rem; }
 .quotation-page { width: min(100%, 920px); min-height: 1110px; margin: 0 auto; border: 1px solid #cbd7e4; background: #fff; box-shadow: 0 18px 45px rgb(23 55 88 / 10%); color: #14263d; padding: 38px; }
 .quote-header { display: flex; align-items: center; justify-content: space-between; gap: 22px; border-bottom: 3px solid #0f4c81; padding-bottom: 18px; }
-.quote-brand .brand-mark { width: 52px; height: 52px; }
-.quote-brand strong { font-size: 1.22rem; }
+.quote-official-logo { display: block; width: min(430px, 62%); height: auto; object-fit: contain; }
 .company-contact { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; color: #4d6077; font-size: .75rem; }
 .company-contact strong { color: #0f4c81; }
 .document-title-row { display: flex; align-items: flex-start; justify-content: space-between; padding: 22px 0 18px; }
@@ -351,9 +350,7 @@ button { cursor: pointer; }
   .calculation-card div:last-child { border-bottom: 0; }
   .quotation-page { min-height: 0; overflow: hidden; padding: 18px; }
   .quote-header, .document-title-row { gap: 12px; }
-  .quote-brand .brand-mark { width: 40px; height: 40px; }
-  .quote-brand strong { font-size: .78rem; }
-  .quote-brand small { font-size: .5rem; }
+  .quote-official-logo { width: 58%; }
   .company-contact { font-size: .55rem; }
   .document-title-row > div:first-child > span { font-size: 1.18rem; }
   .party-grid { grid-template-columns: 1fr; }

@@ -150,7 +150,7 @@ export function AdminDashboard({ catalog, refresh }: Props) {
 
     {tab === "company" && <div className="admin-card settings-layout">
       <div className="logo-manager">
-        <div className="logo-preview">{settings.logoKey ? <img src="/api/admin/settings/logo" alt="Company logo" /> : <ImageIcon />}</div>
+        <div className="logo-preview"><img src={settings.logoKey ? "/api/admin/settings/logo" : "/azarraga-logo-full.jpg"} alt="Azarraga Glass & Aluminum logo" /></div>
         <Label className="file-button"><Upload /> Upload logo<Input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => event.target.files?.[0] && uploadLogo(event.target.files[0])} /></Label>
         <small>PNG, JPG or WebP, up to 5 MB.</small>
       </div>
