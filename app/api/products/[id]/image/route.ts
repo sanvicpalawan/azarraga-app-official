@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import {
+  clearProductImage,
   getFile,
   getProductRecord,
   parseId,
-  removeFile,
   replaceProductImage,
   saveFile,
 } from "@/lib/catalog-store";
@@ -18,11 +18,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const product = getProductRecord(parseId((await params).id));
+    const product = await getProductRecord(parseId((await params).id));
     if (!product?.imageKey) {
       return NextResponse.json({ error: "No product image." }, { status: 404 });
     }
-    const file = getFile(product.imageKey);
+    const file = await getFile(product.imageKey);
     if (!file) return NextResponse.json({ error: "Image not found." }, { status: 404 });
 
     const headers = new Headers({
@@ -52,7 +52,7 @@ export async function POST(
 ) {
   try {
     const id = parseId((await params).id);
-    const product = getProductRecord(id);
+    const product = await getProductRecord(id);
     if (!product) return NextResponse.json({ error: "Product not found." }, { status: 404 });
 
     const form = await request.formData();
@@ -70,8 +70,8 @@ export async function POST(
     }
 
     const extension = image.type === "image/png" ? "png" : image.type === "image/webp" ? "webp" : "jpg";
-    const key = saveFile(`products/${id}`, extension, await image.arrayBuffer(), image.type);
-    replaceProductImage(id, key);
+    const key = await saveFile(`products/${id}`, extension, await image.arrayBuffer(), image.type);
+    await replaceProductImage(id, key);
     return NextResponse.json({ uploaded: true, imageUrl: `/api/products/${id}/image` });
   } catch (error) {
     console.error("Unable to upload product image", error);
@@ -87,14 +87,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const product = getProductRecord(parseId((await params).id));
+    const product = await getProductRecord(parseId((await params).id));
     if (!product) return NextResponse.json({ error: "Product not found." }, { status: 404 });
-    removeFile(product.imageKey);
-    product.imageKey = null;
-    product.imagePath = null;
-    product.updatedAt = new Date().toISOString();
+    await clearProductImage(product.id);
     return NextResponse.json({ deleted: true });
-  } catch {
+  } catch (error) {
+    console.error("Unable to remove product image", error);
     return NextResponse.json(
       { error: "The image could not be removed." },
       { status: 400 },

@@ -23,7 +23,7 @@ export async function PUT(
 ) {
   try {
     const id = parseId((await params).id);
-    const product = updateProduct(id, schema.parse(await request.json()));
+    const product = await updateProduct(id, schema.parse(await request.json()));
     return NextResponse.json({ saved: true, product });
   } catch (error) {
     console.error("Unable to update product", error);
@@ -34,7 +34,7 @@ export async function PUT(
             ? "Check the product fields."
             : "The product could not be updated.",
       },
-      { status: error instanceof z.ZodError ? 400 : 400 },
+      { status: 400 },
     );
   }
 }
@@ -44,7 +44,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const product = deleteProduct(parseId((await params).id));
+    const product = await deleteProduct(parseId((await params).id));
     if (!product) return NextResponse.json({ error: "Product not found." }, { status: 404 });
     return NextResponse.json({ deleted: true });
   } catch (error) {

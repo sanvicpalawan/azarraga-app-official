@@ -14,15 +14,29 @@ const schema = z.object({
 });
 
 export async function GET() {
-  return NextResponse.json({ attributes: getCatalogSnapshot().attributes });
+  try {
+    return NextResponse.json({
+      attributes: (await getCatalogSnapshot()).attributes,
+    });
+  } catch (error) {
+    console.error("Unable to load attributes", error);
+    return NextResponse.json(
+      {
+        error:
+          "Catalog storage is unavailable. Check the database and object storage settings.",
+      },
+      { status: 503 },
+    );
+  }
 }
 
 export async function POST(request: Request) {
   try {
     const input = schema.parse(await request.json());
-    const attribute = addAttribute(input.type as AttributeType, input.name);
+    const attribute = await addAttribute(input.type as AttributeType, input.name);
     return NextResponse.json({ id: attribute.id, created: true }, { status: 201 });
   } catch (error) {
+    console.error("Unable to create attribute", error);
     return NextResponse.json(
       {
         error:

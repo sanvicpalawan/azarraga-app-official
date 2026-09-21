@@ -7,7 +7,9 @@ Official web application and estimation system for **Azarraga Glass & Aluminum S
 - **Next.js 16 App Router** with the standard Node.js runtime
 - **React 19** and **TypeScript** in strict mode
 - **Tailwind CSS v4**, shadcn/ui components, and Lucide icons
-- A small server-side catalog store with the complete default product catalog, add-ons, pricing, and company settings
+- **Neon Postgres** as the catalog database (products, categories, attributes, company settings, and quotations) via the `@neondatabase/serverless` driver — the schema is created and the default catalog is seeded automatically on first use
+- **S3-compatible object storage** (AWS S3 or any S3 endpoint such as Cloudflare R2) for product images and the company logo
+- Without `DATABASE_URL` the app falls back to a built-in in-memory catalog store, so local development works with zero backend setup
 
 The project is intentionally framework-native: there is no alternate Vite build, edge adapter, or provider-specific runtime required to run it.
 
@@ -32,9 +34,17 @@ azarraga-app-official/
 │   ├── ui/                   # Reusable shadcn/ui components
 │   └── admin-dashboard.tsx
 ├── lib/
-│   ├── catalog-store.ts      # Default catalog, settings, and server operations
+│   ├── catalog-store.ts      # Catalog API (picks the active backend)
+│   ├── catalog-store-types.ts# Shared store types and backend contract
+│   ├── catalog-seed.ts       # Default catalog used for both backends
+│   ├── catalog-db-store.ts   # Neon Postgres + S3 backend
+│   ├── catalog-memory-store.ts # In-memory backend (local dev without a DB)
+│   ├── db.ts                 # Neon connection, schema, and seeding
+│   ├── s3.ts                 # S3-compatible object storage client
 │   ├── catalog-types.ts
 │   └── utils.ts
+├── scripts/
+│   └── verify-neon.ts        # Live Neon + object storage verification
 ├── public/
 ├── next.config.ts
 ├── package.json
