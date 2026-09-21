@@ -84,6 +84,22 @@ const DDL_STATEMENTS: string[] = [
     updated_at timestamptz not null default now(),
     constraint quotations_number_key unique (quotation_number)
   )`,
+  `create table if not exists glass_designs (
+    id text primary key,
+    name text not null default '',
+    code text not null default '',
+    description text not null default '',
+    width_mm integer not null,
+    height_mm integer not null,
+    section text not null default 'Windows',
+    type text not null default '',
+    series text not null default '',
+    unit text not null default 'm',
+    spec jsonb not null default '{}'::jsonb,
+    shapes jsonb not null default '[]'::jsonb,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+  )`,
 ];
 
 export type SchemaStatus = { seeded: boolean };
