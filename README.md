@@ -1,102 +1,60 @@
-# Azarraga Glass & Aluminum Supply - Estimation & Management App
+# Azarraga Glass & Aluminum Supply
 
-Official web application and estimation system for **Azarraga Glass & Aluminum Supply**, providing glass and aluminum product configuration, cost estimation, quotation generation, and catalog management.
+Official web application and estimation system for **Azarraga Glass & Aluminum Supply**. The app provides product configuration, cost estimation, quotation generation, and catalog management for glass and aluminum work.
 
----
+## Tech stack
 
-## 🛠 Tech Stack
+- **Next.js 16 App Router** with the standard Node.js runtime
+- **React 19** and **TypeScript** in strict mode
+- **Tailwind CSS v4**, shadcn/ui components, and Lucide icons
+- A small server-side catalog store with the complete default product catalog, add-ons, pricing, and company settings
 
-### Core Framework & Runtime
-- **Next.js 16 (App Router)** & **React 19**
-- **TypeScript** (Strict mode)
-- **Vinext** & **Vite 8**
-- **Cloudflare Workers & Pages runtime**
+The project is intentionally framework-native: there is no alternate Vite build, edge adapter, or provider-specific runtime required to run it.
 
-### UI & Styling
-- **Tailwind CSS v4**
-- **Radix UI** & **shadcn/ui** components
-- **Lucide Icons** (`lucide-react`)
-- **Sonner** (Toast notifications)
-- **Recharts** (Reporting and analytics)
+## Features
 
-### Database & Storage
-- **Cloudflare D1** (Serverless SQLite)
-- **Drizzle ORM** & **Drizzle Kit** (Type-safe schema definitions and SQL migrations)
-- **Cloudflare R2** (Object storage for product images and logos)
+- **Product catalog**: Windows, doors, and custom glass and aluminum fabrications.
+- **Dynamic quotation builder**: Dimension calculations, square-foot or unit pricing, glass specifications, frame finishes, locks, and discounts.
+- **Quotation workflow**: Customer/project details, printable quotation, and browser PDF export.
+- **Admin dashboard**: Manage company details, products, pricing, categories, and dropdown attributes.
+- **Product and company imagery**: The built-in four-panel window image is served from `public/`; uploaded images are handled by standard Next.js route handlers.
 
----
-
-## 📁 Code Tree
+## Project structure
 
 ```text
 azarraga-app-official/
 ├── app/
-│   ├── api/                      # REST API endpoints
-│   │   ├── admin/
-│   │   │   ├── overview/         # Dashboard statistics & analytics
-│   │   │   └── settings/         # Company profile & logo management
-│   │   ├── attributes/           # Aluminum series, glass types, finishes, lock types
-│   │   ├── catalog/              # Public & operational product catalog query
-│   │   ├── categories/           # Product categories (Windows, Doors, Custom, etc.)
-│   │   ├── products/             # Product specifications, base pricing & images
-│   │   └── quotations/           # Quotation creation and history
-│   ├── globals.css               # Global theme and styling
-│   ├── layout.tsx                # Root layout definition
-│   └── page.tsx                  # Interactive estimator, catalog browser & quote engine
+│   ├── api/                  # Next.js route handlers for the catalog and quotations
+│   ├── globals.css
+│   ├── layout.tsx
+│   └── page.tsx              # Catalog browser, estimator, quotation, and admin UI
 ├── components/
-│   ├── ui/                       # Reusable shadcn/ui component library
-│   └── admin-dashboard.tsx       # Administrative control center
-├── db/
-│   ├── index.ts                  # Cloudflare D1 database client initialization
-│   └── schema.ts                 # Drizzle ORM relational schema definitions
-├── drizzle/                      # Drizzle SQL migration files and schema snapshots
-│   ├── 0000_late_whistler.sql
-│   ├── 0001_abnormal_blink.sql
-│   └── meta/
-├── hooks/
-│   └── use-mobile.ts             # Responsive viewport detection hook
+│   ├── ui/                   # Reusable shadcn/ui components
+│   └── admin-dashboard.tsx
 ├── lib/
-│   ├── catalog-db.ts             # Database queries & initial catalog seed data
-│   ├── catalog-types.ts          # Core domain models and TypeScript interfaces
-│   └── utils.ts                  # Classnames and utility helper functions
-├── public/                       # Static assets and reference diagrams
-├── scripts/                      # Environment and build scripts
-├── cloudflare-env.d.ts           # Cloudflare Worker environment typings (D1, R2)
-├── drizzle.config.ts             # Drizzle Kit configuration
-├── package.json                  # Package manifest and dependencies
-├── tsconfig.json                 # TypeScript compiler configuration
-└── vite.config.ts                # Vite & Vinext Cloudflare build configuration
+│   ├── catalog-store.ts      # Default catalog, settings, and server operations
+│   ├── catalog-types.ts
+│   └── utils.ts
+├── public/
+├── next.config.ts
+├── package.json
+└── tsconfig.json
 ```
 
----
+## Getting started
 
-## ✨ Features
-
-- **Product Catalog**: Windows (sliding, awning, jalousie, fixed, folding), doors (bi-fold, sliding, casement, swing, roll-up, hanging), and custom glass & aluminum fabrications.
-- **Dynamic Quotation Builder**: Real-time dimension calculations (sq. ft. / unit based), custom glass specifications, frame finishes, and lock hardware options.
-- **Admin Dashboard**: Manage company details, product listings, pricing rules, categories, and attributes.
-- **Edge Deployment**: Designed for fast, low-latency execution with Cloudflare D1 and R2 storage bindings.
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-- Node.js `>=22.13.0`
-- pnpm
-
-### Development
+Prerequisite: Node.js `>=22.13.0`.
 
 ```bash
-# Install dependencies
-npm run install:ci
-
-# Start development server
-npm run dev
-
-# Generate Drizzle migrations
-npm run db:generate
-
-# Build for deployment
-npm run build
+pnpm install
+pnpm dev
 ```
+
+Open <http://localhost:3000> to use the estimator. Build and run the production app with the same commands Vercel uses:
+
+```bash
+pnpm build
+pnpm start
+```
+
+`npm run build` is also supported and invokes the standard `next build` command directly.

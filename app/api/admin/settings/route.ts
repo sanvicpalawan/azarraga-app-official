@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getRawDb } from "@/db";
-import { ensureCatalogDefaults } from "@/lib/catalog-db";
+import { getSettings, updateSettings } from "@/lib/catalog-store";
+
+export const dynamic = "force-dynamic";
 
 const schema = z.object({
   companyName: z.string().trim().min(1).max(120),
@@ -18,35 +19,26 @@ const schema = z.object({
 });
 
 export async function GET() {
-  try {
-    await ensureCatalogDefaults();
-    const settings = await getRawDb().prepare(`SELECT id, company_name AS companyName,
-      logo_key AS logoKey, address, contact_numbers AS contactNumbers, email, tin,
-      bank_account_name AS bankAccountName, bank_account_number AS bankAccountNumber,
-      bank_name AS bankName, bank_branch AS bankBranch, terms_conditions AS termsConditions,
-      pdf_header AS pdfHeader, updated_at AS updatedAt FROM global_settings WHERE id = 1`).first();
-    return NextResponse.json({ settings });
-  } catch (error) {
-    console.error("Unable to load settings", error);
-    return NextResponse.json({ error: "Company settings are unavailable." }, { status: 503 });
-  }
+  return NextResponse.json(
+    { settings: getSettings() },
+    { headers: { "cache-control": "no-store" } },
+  );
 }
 
 export async function PUT(request: Request) {
   try {
-    const input = schema.parse(await request.json());
-    await ensureCatalogDefaults();
-    await getRawDb().prepare(`UPDATE global_settings SET
-      company_name = ?, address = ?, contact_numbers = ?, email = ?, tin = ?,
-      bank_account_name = ?, bank_account_number = ?, bank_name = ?, bank_branch = ?,
-      terms_conditions = ?, pdf_header = ?, updated_at = ? WHERE id = 1`)
-      .bind(input.companyName, input.address, input.contactNumbers, input.email, input.tin,
-        input.bankAccountName, input.bankAccountNumber, input.bankName, input.bankBranch,
-        input.termsConditions, input.pdfHeader, new Date().toISOString())
-      .run();
-    return NextResponse.json({ saved: true });
+    const settings = updateSettings(schema.parse(await request.json()));
+    return NextResponse.json({ saved: true, settings });
   } catch (error) {
     console.error("Unable to update settings", error);
-    return NextResponse.json({ error: error instanceof z.ZodError ? "Check the company profile fields." : "Company settings could not be saved." }, { status: error instanceof z.ZodError ? 400 : 503 });
+    return NextResponse.json(
+      {
+        error:
+          error instanceof z.ZodError
+            ? "Check the company profile fields."
+            : "Company settings could not be saved.",
+      },
+      { status: error instanceof z.ZodError ? 400 : 400 },
+    );
   }
 }
