@@ -50,7 +50,6 @@ export function AdminDashboard({ catalog, refresh }: Props) {
   const [categoryName, setCategoryName] = useState("");
   const [newAttributes, setNewAttributes] = useState<Record<Attribute["type"], string>>({ series: "", glass: "", color: "", lock: "" });
 
-  useEffect(() => { setSettings(catalog.settings); }, [catalog.settings]);
   useEffect(() => {
     api("/api/admin/overview").then(setOverview).catch((error) => setNotice(error.message));
   }, [catalog.products.length]);

@@ -1,8 +1,12 @@
-import { desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getDb } from "@/db";
-import { quotationItems, quotations } from "@/db/schema";
+import {
+  listQuotations,
+  saveQuotation,
+  type QuotationInput,
+} from "@/lib/catalog-store";
+
+export const dynamic = "force-dynamic";
 
 const quotationSchema = z.object({
   quotationNumber: z.string().min(1),
@@ -33,65 +37,24 @@ const quotationSchema = z.object({
 });
 
 export async function GET() {
-  try {
-    const rows = await getDb().select().from(quotations).orderBy(desc(quotations.updatedAt)).limit(25);
-    return NextResponse.json({ quotations: rows });
-  } catch (error) {
-    console.error("Unable to load quotations", error);
-    return NextResponse.json({ error: "Quotations are temporarily unavailable." }, { status: 503 });
-  }
+  return NextResponse.json({ quotations: listQuotations() });
 }
 
 export async function POST(request: Request) {
   try {
-    const payload = quotationSchema.parse(await request.json());
-    const db = getDb();
-
-    await db.insert(quotations).values({
-      quotationNumber: payload.quotationNumber,
-      customerName: payload.customerName,
-      projectName: payload.projectName,
-      projectAddress: payload.projectAddress,
-      subtotal: payload.subtotal,
-      discount: payload.discount,
-      grandTotal: payload.grandTotal,
-      totalSqft: payload.totalSqft,
-      updatedAt: new Date().toISOString(),
-    }).onConflictDoUpdate({
-      target: quotations.quotationNumber,
-      set: {
-        customerName: payload.customerName,
-        projectName: payload.projectName,
-        projectAddress: payload.projectAddress,
-        subtotal: payload.subtotal,
-        discount: payload.discount,
-        grandTotal: payload.grandTotal,
-        totalSqft: payload.totalSqft,
-        updatedAt: new Date().toISOString(),
-      },
-    });
-
-    const [quotation] = await db.select({ id: quotations.id })
-      .from(quotations)
-      .where(eq(quotations.quotationNumber, payload.quotationNumber))
-      .limit(1);
-
-    if (!quotation) {
-      throw new Error("Quotation could not be created.");
-    }
-
-    await db.delete(quotationItems).where(eq(quotationItems.quotationId, quotation.id));
-    await db.insert(quotationItems).values({
-      quotationId: quotation.id,
-      ...payload.item,
-    });
-
+    const payload = quotationSchema.parse(await request.json()) as QuotationInput;
+    const quotation = saveQuotation(payload);
     return NextResponse.json({ id: quotation.id, saved: true });
   } catch (error) {
     console.error("Unable to save quotation", error);
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Please check the quotation fields." }, { status: 400 });
-    }
-    return NextResponse.json({ error: "The quotation could not be saved." }, { status: 503 });
+    return NextResponse.json(
+      {
+        error:
+          error instanceof z.ZodError
+            ? "Please check the quotation fields."
+            : "The quotation could not be saved.",
+      },
+      { status: error instanceof z.ZodError ? 400 : 503 },
+    );
   }
 }

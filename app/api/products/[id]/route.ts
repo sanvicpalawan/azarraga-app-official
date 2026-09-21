@@ -1,8 +1,12 @@
-import { env } from "cloudflare:workers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getRawDb } from "@/db";
-import { parseId } from "@/lib/catalog-db";
+import {
+  deleteProduct,
+  parseId,
+  updateProduct,
+} from "@/lib/catalog-store";
+
+export const dynamic = "force-dynamic";
 
 const schema = z.object({
   name: z.string().trim().min(1).max(140),
@@ -13,31 +17,41 @@ const schema = z.object({
   defaultGlassId: z.number().int().positive().nullable(),
 });
 
-export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     const id = parseId((await params).id);
-    const input = schema.parse(await request.json());
-    await getRawDb().prepare(`UPDATE products SET name = ?, category_id = ?, base_price = ?,
-      description = ?, default_series_id = ?, default_glass_id = ?, updated_at = ? WHERE id = ?`)
-      .bind(input.name, input.categoryId, input.basePrice, input.description, input.defaultSeriesId, input.defaultGlassId, new Date().toISOString(), id)
-      .run();
-    return NextResponse.json({ saved: true });
+    const product = updateProduct(id, schema.parse(await request.json()));
+    return NextResponse.json({ saved: true, product });
   } catch (error) {
     console.error("Unable to update product", error);
-    return NextResponse.json({ error: error instanceof z.ZodError ? "Check the product fields." : "The product could not be updated." }, { status: 400 });
+    return NextResponse.json(
+      {
+        error:
+          error instanceof z.ZodError
+            ? "Check the product fields."
+            : "The product could not be updated.",
+      },
+      { status: error instanceof z.ZodError ? 400 : 400 },
+    );
   }
 }
 
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
-    const id = parseId((await params).id);
-    const db = getRawDb();
-    const product = await db.prepare("SELECT image_key AS imageKey FROM products WHERE id = ?").bind(id).first<{ imageKey: string | null }>();
-    if (product?.imageKey && env.BUCKET) await env.BUCKET.delete(product.imageKey);
-    await db.prepare("DELETE FROM products WHERE id = ?").bind(id).run();
+    const product = deleteProduct(parseId((await params).id));
+    if (!product) return NextResponse.json({ error: "Product not found." }, { status: 404 });
     return NextResponse.json({ deleted: true });
   } catch (error) {
     console.error("Unable to delete product", error);
-    return NextResponse.json({ error: "The product could not be deleted." }, { status: 400 });
+    return NextResponse.json(
+      { error: "The product could not be deleted." },
+      { status: 400 },
+    );
   }
 }
