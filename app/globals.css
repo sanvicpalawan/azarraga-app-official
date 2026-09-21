@@ -118,6 +118,13 @@ button { cursor: pointer; }
 .catalog-summary { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin: 22px 0 14px; }
 .catalog-summary > div { display: flex; flex-direction: column; }
 .catalog-summary span { color: #6a7b8f; font-size: .86rem; }
+.catalog-page:focus { outline: 2px solid #2b78b7; outline-offset: 3px; border-radius: 16px; }
+.selection-notice { display: flex; align-items: flex-start; gap: 10px; border: 1px solid #e8c268; border-radius: 13px; background: #fff8e7; padding: 13px 15px; margin-bottom: 16px; color: #7a5205; font-size: .88rem; font-weight: 650; }
+.selection-notice > svg { width: 19px; height: 19px; flex: none; margin-top: 1px; color: #b07d1a; }
+.selection-notice span { flex: 1; }
+.selection-notice button { flex: none; display: grid; width: 26px; height: 26px; place-items: center; border: 0; border-radius: 8px; background: transparent; color: #8a6a25; }
+.selection-notice button:hover { background: #f6e7c2; }
+.selection-notice button svg { width: 15px; height: 15px; margin: 0; }
 .product-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
 .product-card { display: flex; min-width: 0; flex-direction: column; align-items: stretch; border: 1px solid #d5e0ea; border-radius: 15px; background: #fff; padding: 0; color: inherit; text-align: left; box-shadow: 0 8px 26px rgb(21 55 87 / 5%); transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; overflow: hidden; }
 .product-card:hover { border-color: #76a6cc; box-shadow: 0 14px 32px rgb(21 55 87 / 10%); transform: translateY(-2px); }
@@ -365,6 +372,7 @@ button { cursor: pointer; }
   .category-tabs { width: 100%; }
   .catalog-summary { align-items: flex-start; }
   .catalog-summary button { display: none; }
+  .selection-notice { gap: 8px; padding: 11px 12px; font-size: .8rem; }
   .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .product-card h2 { margin-inline: 12px; font-size: .9rem; }
   .product-card > p { margin-inline: 12px; }
