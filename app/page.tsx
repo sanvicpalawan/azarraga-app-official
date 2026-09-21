@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Building2, Calculator, Check, ChevronRight, Download, FileText, ImageIcon, LayoutGrid, PackagePlus, Printer, Save, Search, Settings2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, ArrowLeft, Building2, Calculator, Check, ChevronRight, Download, FileText, ImageIcon, LayoutGrid, PackagePlus, Printer, Save, Search, Settings2, X } from "lucide-react";
 import { AdminDashboard } from "@/components/admin-dashboard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,13 +35,20 @@ export default function Home() {
   const [location, setLocation] = useState(""), [description, setDescription] = useState("");
   const [customerName, setCustomerName] = useState(""), [projectName, setProjectName] = useState(""), [projectAddress, setProjectAddress] = useState("");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [chooserNotice, setChooserNotice] = useState("");
+  const [chooserNudge, setChooserNudge] = useState(0);
+  const productChooserRef = useRef<HTMLElement | null>(null);
 
   const refresh = async () => {
     const response = await fetch("/api/catalog", { cache: "no-store" });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Catalog unavailable.");
     setCatalog(data);
-    if (product) setProduct(data.products.find((item: Product) => item.id === product.id) || null);
+    if (product) {
+      const updated = data.products.find((item: Product) => item.id === product.id);
+      if (updated) setProduct(updated);
+      else { setProduct(null); setScreen((current) => (current === "configure" || current === "preview" ? "catalog" : current)); }
+    }
   };
   useEffect(() => {
     let active = true;
@@ -74,10 +81,26 @@ export default function Home() {
   const visibleProducts = useMemo(() => catalog?.products.filter((item) => (selectedCategory === "All" || item.categoryName === selectedCategory) && `${item.name} ${item.description}`.toLowerCase().includes(search.toLowerCase())) || [], [catalog, selectedCategory, search]);
 
   const chooseProduct = (item: Product) => {
-    setProduct(item); setRate(String(item.basePrice || 0)); setSeries(item.defaultSeries || grouped.series[0]?.name || ""); setGlass(item.defaultGlass || grouped.glass[0]?.name || "");
+    setChooserNotice(""); setProduct(item); setRate(String(item.basePrice || 0)); setSeries(item.defaultSeries || grouped.series[0]?.name || ""); setGlass(item.defaultGlass || grouped.glass[0]?.name || "");
     setColor(grouped.color[0]?.name || ""); setLock(grouped.lock[0]?.name || ""); setDescription(item.description); setScreen("configure"); window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const canPreview = Boolean(product && Number(width) > 0 && Number(height) > 0 && Number(quantity) > 0 && Number(rate) >= 0);
+
+  const goAfterChoosingProduct = (target: "configure" | "quote") => {
+    if (product) { setChooserNotice(""); setScreen(target === "configure" ? "configure" : "preview"); return; }
+    setScreen("catalog");
+    setChooserNotice(target === "configure"
+      ? "Choose a product first — click any product card below to start configuring it."
+      : "Choose a product first — a quotation needs a selected product to price.");
+    setChooserNudge((count) => count + 1);
+  };
+  useEffect(() => {
+    if (!chooserNotice) return;
+    const node = productChooserRef.current;
+    if (!node) return;
+    node.scrollIntoView({ behavior: "smooth", block: "start" });
+    node.focus({ preventScroll: true });
+  }, [chooserNudge, chooserNotice]);
 
   const saveDraft = async () => {
     if (!product || !canPreview) return; setSaveStatus("saving");
@@ -103,12 +126,12 @@ export default function Home() {
 
   return <main className="app-shell">
     <aside className="side-rail no-print"><div className="brand-lockup compact-brand"><span className="brand-mark">{settings.logoKey ? <img src="/api/admin/settings/logo" alt="" /> : <Building2 />}</span><span><strong>AZARRAGA</strong><small>GLASS & ALUMINUM</small></span></div><nav aria-label="App sections">
-      <button className={`rail-link ${screen === "catalog" ? "active" : ""}`} onClick={() => setScreen("catalog")}><LayoutGrid />Choose Product</button><button className={`rail-link ${screen === "configure" ? "active" : ""}`} onClick={() => product ? setScreen("configure") : setScreen("catalog")}><Calculator />Configure</button><button className={`rail-link ${screen === "preview" ? "active" : ""}`} onClick={() => product ? setScreen("preview") : setScreen("catalog")}><FileText />Quote & Invoice</button><button className={`rail-link ${screen === "admin" ? "active" : ""}`} onClick={() => setScreen("admin")}><Settings2 />Admin Settings</button>
+      <button className={`rail-link ${screen === "catalog" ? "active" : ""}`} onClick={() => setScreen("catalog")}><LayoutGrid />Choose Product</button><button className={`rail-link ${screen === "configure" ? "active" : ""}`} onClick={() => goAfterChoosingProduct("configure")}><Calculator />Configure</button><button className={`rail-link ${screen === "preview" ? "active" : ""}`} onClick={() => goAfterChoosingProduct("quote")}><FileText />Quote & Invoice</button><button className={`rail-link ${screen === "admin" ? "active" : ""}`} onClick={() => setScreen("admin")}><Settings2 />Admin Settings</button>
     </nav><div className="rail-help"><strong>Simple workflow</strong><span>Choose → Configure → Quote</span></div></aside>
     <section className="workspace"><header className="app-header no-print"><div className="mobile-brand brand-lockup"><span className="brand-mark"><Building2 /></span><span><strong>AZARRAGA</strong><small>GLASS & ALUMINUM</small></span></div><div className="title-block"><div><p>{screen === "admin" ? "Manage the app" : "Windows, doors & glass works"}</p><h1>{screen === "catalog" ? "Choose a Product" : screen === "configure" ? "Configure Product" : screen === "preview" ? "Quote & Invoice" : "Admin Settings"}</h1></div></div>{screen !== "catalog" && screen !== "admin" && <div className="header-actions"><Button variant="outline" onClick={() => setScreen(screen === "preview" ? "configure" : "catalog")}><ArrowLeft />Back</Button>{screen === "configure" && <Button disabled={!canPreview} onClick={() => setScreen("preview")}>Review Quote<ChevronRight /></Button>}{screen === "preview" && <Button onClick={() => window.print()}><Download />Download PDF</Button>}</div>}</header>
-      <nav className="mobile-nav no-print" aria-label="Mobile navigation"><button className={screen === "catalog" ? "active" : ""} onClick={() => setScreen("catalog")}><LayoutGrid />Products</button><button className={screen === "configure" ? "active" : ""} onClick={() => product ? setScreen("configure") : setScreen("catalog")}><Calculator />Configure</button><button className={screen === "preview" ? "active" : ""} onClick={() => product ? setScreen("preview") : setScreen("catalog")}><FileText />Quote</button><button className={screen === "admin" ? "active" : ""} onClick={() => setScreen("admin")}><Settings2 />Admin</button></nav>
+      <nav className="mobile-nav no-print" aria-label="Mobile navigation"><button className={screen === "catalog" ? "active" : ""} onClick={() => setScreen("catalog")}><LayoutGrid />Products</button><button className={screen === "configure" ? "active" : ""} onClick={() => goAfterChoosingProduct("configure")}><Calculator />Configure</button><button className={screen === "preview" ? "active" : ""} onClick={() => goAfterChoosingProduct("quote")}><FileText />Quote</button><button className={screen === "admin" ? "active" : ""} onClick={() => setScreen("admin")}><Settings2 />Admin</button></nav>
 
-      {screen === "catalog" && <section className="catalog-page"><div className="catalog-tools"><div className="search-box"><Search /><Input aria-label="Search products" placeholder="Search windows, doors, glass…" value={search} onChange={(event) => setSearch(event.target.value)} /></div><div className="category-tabs"><button className={selectedCategory === "All" ? "active" : ""} onClick={() => setSelectedCategory("All")}>All</button>{catalog.categories.map((category) => <button className={selectedCategory === category.name ? "active" : ""} key={category.id} onClick={() => setSelectedCategory(category.name)}>{category.name}</button>)}</div></div><div className="catalog-summary"><div><strong>{visibleProducts.length} products</strong><span>Select a product to enter sizes and pricing.</span></div><Button variant="outline" onClick={() => setScreen("admin")}><PackagePlus />Manage Products</Button></div><div className="product-grid">{visibleProducts.map((item) => <button className="product-card" key={item.id} onClick={() => chooseProduct(item)}><ProductPicture product={item} /><span className="product-category">{item.categoryName}</span><h2>{item.name}</h2><p>{item.description || "Custom fabrication and installation."}</p><div><strong>{item.basePrice > 0 ? `${money.format(item.basePrice)} base rate` : "Set price in quote"}</strong><span>Configure <ChevronRight /></span></div></button>)}</div>{!visibleProducts.length && <div className="empty-state"><Search /><h2>No matching products</h2><p>Try another search or add the product in Admin Settings.</p></div>}</section>}
+      {screen === "catalog" && <section className="catalog-page" ref={productChooserRef} tabIndex={-1}>{chooserNotice && <div className="selection-notice" role="status" aria-live="polite"><AlertCircle /><span>{chooserNotice}</span><button type="button" aria-label="Dismiss notice" onClick={() => setChooserNotice("")}><X /></button></div>}<div className="catalog-tools"><div className="search-box"><Search /><Input aria-label="Search products" placeholder="Search windows, doors, glass…" value={search} onChange={(event) => setSearch(event.target.value)} /></div><div className="category-tabs"><button className={selectedCategory === "All" ? "active" : ""} onClick={() => setSelectedCategory("All")}>All</button>{catalog.categories.map((category) => <button className={selectedCategory === category.name ? "active" : ""} key={category.id} onClick={() => setSelectedCategory(category.name)}>{category.name}</button>)}</div></div><div className="catalog-summary"><div><strong>{visibleProducts.length} products</strong><span>Select a product to enter sizes and pricing.</span></div><Button variant="outline" onClick={() => setScreen("admin")}><PackagePlus />Manage Products</Button></div><div className="product-grid">{visibleProducts.map((item) => <button className="product-card" key={item.id} onClick={() => chooseProduct(item)}><ProductPicture product={item} /><span className="product-category">{item.categoryName}</span><h2>{item.name}</h2><p>{item.description || "Custom fabrication and installation."}</p><div><strong>{item.basePrice > 0 ? `${money.format(item.basePrice)} base rate` : "Set price in quote"}</strong><span>Configure <ChevronRight /></span></div></button>)}</div>{!visibleProducts.length && <div className="empty-state"><Search /><h2>No matching products</h2><p>Try another search or add the product in Admin Settings.</p></div>}</section>}
 
       {screen === "configure" && product && <section className="configure-flow"><div className="flow-steps no-print"><span className="done"><Check />Product</span><i /><span className="active">2</span><strong>Configure</strong><i /><span>3</span><strong>Quote</strong></div><div className="configure-layout"><section className="configure-main"><div className="selected-product-card"><ProductPicture product={product} /><div><span className="eyebrow">{product.categoryName}</span><h2>{product.name}</h2><p>{product.description}</p><Button variant="outline" onClick={() => setScreen("catalog")}>Change product</Button></div></div><div className="form-card"><div className="form-section-title full-span"><span>1</span><div><h3>Size and price</h3><p>Enter measurements in feet. Totals update instantly.</p></div></div>
         <div className="field-stack"><Label htmlFor="width">Width (ft) *</Label><Input id="width" type="number" min="0" step="0.01" value={width} onChange={(event) => setWidth(event.target.value)} /></div><div className="field-stack"><Label htmlFor="height">Height (ft) *</Label><Input id="height" type="number" min="0" step="0.01" value={height} onChange={(event) => setHeight(event.target.value)} /></div><div className="field-stack"><Label htmlFor="quantity">Quantity *</Label><Input id="quantity" type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></div><div className="field-stack"><Label htmlFor="rate">Rate *</Label><Input id="rate" type="number" min="0" step="0.01" value={rate} onChange={(event) => setRate(event.target.value)} /></div>
