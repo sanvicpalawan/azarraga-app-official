@@ -19,15 +19,26 @@ const schema = z.object({
 });
 
 export async function GET() {
-  return NextResponse.json(
-    { settings: getSettings() },
-    { headers: { "cache-control": "no-store" } },
-  );
+  try {
+    return NextResponse.json(
+      { settings: await getSettings() },
+      { headers: { "cache-control": "no-store" } },
+    );
+  } catch (error) {
+    console.error("Unable to load settings", error);
+    return NextResponse.json(
+      {
+        error:
+          "Catalog storage is unavailable. Check the database and object storage settings.",
+      },
+      { status: 503 },
+    );
+  }
 }
 
 export async function PUT(request: Request) {
   try {
-    const settings = updateSettings(schema.parse(await request.json()));
+    const settings = await updateSettings(schema.parse(await request.json()));
     return NextResponse.json({ saved: true, settings });
   } catch (error) {
     console.error("Unable to update settings", error);
@@ -38,7 +49,7 @@ export async function PUT(request: Request) {
             ? "Check the company profile fields."
             : "Company settings could not be saved.",
       },
-      { status: error instanceof z.ZodError ? 400 : 400 },
+      { status: 400 },
     );
   }
 }

@@ -14,12 +14,23 @@ export const productSchema = z.object({
 });
 
 export async function GET() {
-  return NextResponse.json({ products: getCatalogSnapshot().products });
+  try {
+    return NextResponse.json({ products: (await getCatalogSnapshot()).products });
+  } catch (error) {
+    console.error("Unable to load products", error);
+    return NextResponse.json(
+      {
+        error:
+          "Catalog storage is unavailable. Check the database and object storage settings.",
+      },
+      { status: 503 },
+    );
+  }
 }
 
 export async function POST(request: Request) {
   try {
-    const product = addProduct(productSchema.parse(await request.json()));
+    const product = await addProduct(productSchema.parse(await request.json()));
     return NextResponse.json({ id: product.id, created: true }, { status: 201 });
   } catch (error) {
     console.error("Unable to create product", error);

@@ -15,12 +15,13 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const attribute = updateAttribute(
+    const attribute = await updateAttribute(
       parseId((await params).id),
       schema.parse(await request.json()).name,
     );
     return NextResponse.json({ saved: true, attribute });
   } catch (error) {
+    console.error("Unable to update attribute", error);
     return NextResponse.json(
       {
         error:
@@ -38,11 +39,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    if (!deleteAttribute(parseId((await params).id))) {
+    if (!(await deleteAttribute(parseId((await params).id)))) {
       return NextResponse.json({ error: "Option not found." }, { status: 404 });
     }
     return NextResponse.json({ deleted: true });
-  } catch {
+  } catch (error) {
+    console.error("Unable to delete attribute", error);
     return NextResponse.json(
       { error: "This option is a product default. Update those products first." },
       { status: 409 },

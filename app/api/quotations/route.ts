@@ -37,13 +37,24 @@ const quotationSchema = z.object({
 });
 
 export async function GET() {
-  return NextResponse.json({ quotations: listQuotations() });
+  try {
+    return NextResponse.json({ quotations: await listQuotations() });
+  } catch (error) {
+    console.error("Unable to load quotations", error);
+    return NextResponse.json(
+      {
+        error:
+          "Catalog storage is unavailable. Check the database and object storage settings.",
+      },
+      { status: 503 },
+    );
+  }
 }
 
 export async function POST(request: Request) {
   try {
     const payload = quotationSchema.parse(await request.json()) as QuotationInput;
-    const quotation = saveQuotation(payload);
+    const quotation = await saveQuotation(payload);
     return NextResponse.json({ id: quotation.id, saved: true });
   } catch (error) {
     console.error("Unable to save quotation", error);

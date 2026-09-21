@@ -15,12 +15,13 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const category = updateCategory(
+    const category = await updateCategory(
       parseId((await params).id),
       schema.parse(await request.json()).name,
     );
     return NextResponse.json({ saved: true, category });
   } catch (error) {
+    console.error("Unable to update category", error);
     return NextResponse.json(
       {
         error:
@@ -38,11 +39,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    if (!deleteCategory(parseId((await params).id))) {
+    if (!(await deleteCategory(parseId((await params).id)))) {
       return NextResponse.json({ error: "Category not found." }, { status: 404 });
     }
     return NextResponse.json({ deleted: true });
-  } catch {
+  } catch (error) {
+    console.error("Unable to delete category", error);
     return NextResponse.json(
       { error: "Move or delete the products in this category first." },
       { status: 409 },
