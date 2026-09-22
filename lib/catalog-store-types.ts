@@ -9,6 +9,9 @@ export type ProductInput = {
   description: string;
   defaultSeriesId: number | null;
   defaultGlassId: number | null;
+  productKey?: string | null;
+  designId?: string | null;
+  isCustom?: boolean;
 };
 
 export type SettingsInput = Omit<Settings, "id" | "logoKey" | "updatedAt">;

@@ -12,7 +12,7 @@ const shapeSchema = z.discriminatedUnion("t", [
   z.object({ id: z.string(), t: z.literal("text"), x: z.number(), y: z.number(), text: z.string(), size: z.number() }),
 ]);
 
-const designSchema = z.object({
+export const designSchema = z.object({
   id: z.string().min(1),
   name: z.string(),
   code: z.string(),

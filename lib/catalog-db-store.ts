@@ -64,7 +64,8 @@ const PRODUCT_SELECT = `
   select p.id, p.name, p.category_id, c.name as category_name, p.base_price,
          p.description, p.default_series_id, p.default_glass_id,
          s.name as default_series, g.name as default_glass,
-         p.image_key, p.image_path, p.updated_at
+         p.image_key, p.image_path, p.product_key, p.design_id, p.is_custom,
+         p.updated_at
   from products p
   join categories c on c.id = p.category_id
   left join attributes s on s.id = p.default_series_id
@@ -88,6 +89,9 @@ function mapProductView(row: Row): Product {
     imageKey,
     imagePath,
     imageUrl: imageKey ? `/api/products/${id}/image` : imagePath,
+    productKey: nullableStr(row.product_key),
+    designId: nullableStr(row.design_id),
+    isCustom: Boolean(row.is_custom),
     updatedAt: iso(row.updated_at),
   };
 }
@@ -114,6 +118,9 @@ function toRecord(product: Product): ProductRecord {
     defaultGlass: product.defaultGlass,
     imageKey: product.imageKey,
     imagePath: product.imagePath,
+    productKey: product.productKey,
+    designId: product.designId,
+    isCustom: product.isCustom,
     updatedAt: product.updatedAt,
   };
 }
@@ -276,10 +283,11 @@ function createDbBackend(): CatalogBackend {
       const [inserted] = await db`
         insert into products (
           name, category_id, base_price, description,
-          default_series_id, default_glass_id
+          default_series_id, default_glass_id, product_key, design_id, is_custom
         ) values (
           ${input.name}, ${input.categoryId}, ${input.basePrice}, ${input.description},
-          ${input.defaultSeriesId}, ${input.defaultGlassId}
+          ${input.defaultSeriesId}, ${input.defaultGlassId}, ${input.productKey ?? null},
+          ${input.designId ?? null}, ${input.isCustom ?? false}
         )
         returning id`;
       const product = await selectProductView(db, num((inserted as Row).id));
@@ -306,6 +314,9 @@ function createDbBackend(): CatalogBackend {
           description = ${input.description},
           default_series_id = ${input.defaultSeriesId},
           default_glass_id = ${input.defaultGlassId},
+          product_key = coalesce(${input.productKey ?? null}, product_key),
+          design_id = coalesce(${input.designId ?? null}, design_id),
+          is_custom = coalesce(${input.isCustom ?? null}, is_custom),
           updated_at = now()
         where id = ${id}`;
       const product = await selectProductView(db, id);

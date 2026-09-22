@@ -121,6 +121,9 @@ export function buildDefaultCatalogData(now: string): DefaultCatalogData {
     defaultGlass: entry.glass,
     imageKey: null,
     imagePath: entry.imagePath,
+    productKey: null,
+    designId: null,
+    isCustom: false,
     updatedAt: now,
   }));
 

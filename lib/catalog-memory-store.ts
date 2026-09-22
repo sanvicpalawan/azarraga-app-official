@@ -189,6 +189,9 @@ export function getMemoryBackend(): CatalogBackend {
           defaultGlass: findAttributeName(store, input.defaultGlassId),
           imageKey: null,
           imagePath: null,
+          productKey: input.productKey ?? null,
+          designId: input.designId ?? null,
+          isCustom: input.isCustom ?? false,
           updatedAt: new Date().toISOString(),
         };
         store.products.push(product);
@@ -214,6 +217,9 @@ export function getMemoryBackend(): CatalogBackend {
 
         Object.assign(product, {
           ...input,
+          productKey: input.productKey ?? product.productKey,
+          designId: input.designId ?? product.designId,
+          isCustom: input.isCustom ?? product.isCustom,
           categoryName: category.name,
           defaultSeries: findAttributeName(store, input.defaultSeriesId),
           defaultGlass: findAttributeName(store, input.defaultGlassId),

@@ -16,6 +16,8 @@ export interface DesignerScreenProps {
   initial?: Design;
   /** Called with the design and a transparent PNG data URL when the user taps "Use in quote". */
   onUseInQuote?: (design: Design, png: string) => void;
+  /** Refreshes the shared catalog after an owner-designed product is published. */
+  onProductSaved?: () => void | Promise<void>;
 }
 
 const TOOLS: { key: Tool; label: string; glyph: string }[] = [
@@ -39,7 +41,7 @@ function LengthField({ label, value, placeholder, onCommit }: { label: string; v
   );
 }
 
-export default function DesignerScreen({ store = apiStore, initial, onUseInQuote }: DesignerScreenProps) {
+export default function DesignerScreen({ store = apiStore, initial, onUseInQuote, onProductSaved }: DesignerScreenProps) {
   const [design, setDesign] = useState<Design>(() => initial ?? blankDesign());
   const dref = useRef(design); dref.current = design;
   const past = useRef<Snap[]>([]); const future = useRef<Snap[]>([]);
@@ -196,12 +198,25 @@ export default function DesignerScreen({ store = apiStore, initial, onUseInQuote
   const fname = (design.code || design.name || 'design').trim().replace(/[^\w-]+/g, '_');
   const download = (href: string, name: string) => { const a = document.createElement('a'); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove(); };
   const symbolSvg = () => designToSvg(dref.current, { px: 800, style: 'invoice', tone: dref.current.section === 'Doors' ? 'grey' : 'blue', dims: dimsOn, fmt });
-  const exportPng = async () => { try { download(await svgToPngDataUrl(symbolSvg(), 2), fname + '.png'); } catch { flash('Could not create PNG'); } };
-  const exportSvg = () => download('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(symbolSvg()), fname + '.svg');
+  const saveOpenProduct = async () => {
+    const d: Design = { ...dref.current, name: dref.current.name.trim() || 'Untitled design', updatedAt: new Date().toISOString() };
+    const png = await svgToPngDataUrl(symbolSvg(), 2);
+    if (store.publish) {
+      const published = await store.publish(d, png);
+      await onProductSaved?.();
+      flash(`Saved ${published.productKey} to Library and Products`);
+    } else {
+      await store.save(d);
+      flash('Saved to library');
+    }
+    setDesign(d); setDirty(false);
+    return { d, png };
+  };
+  const exportPng = async () => { try { const { png } = await saveOpenProduct(); download(png, fname + '.png'); } catch { flash('Could not save or create PNG'); } };
+  const exportSvg = async () => { try { await saveOpenProduct(); download('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(symbolSvg()), fname + '.svg'); } catch { flash('Could not save or create SVG'); } };
   const useInQuote = async () => { try { onUseInQuote?.(dref.current, await svgToPngDataUrl(symbolSvg(), 2)); } catch { flash('Could not create image'); } };
   const save = async () => {
-    const d: Design = { ...dref.current, name: dref.current.name.trim() || 'Untitled design', updatedAt: new Date().toISOString() };
-    try { await store.save(d); setDesign(d); setDirty(false); flash('Saved to library'); } catch { flash('Save failed'); }
+    try { await saveOpenProduct(); } catch { flash('Open Product save failed'); }
   };
   const openLib = async () => { try { setLib(await store.list()); } catch { flash('Could not load library'); } };
   const openDesign = (d: Design) => { past.current = []; future.current = []; setDesign(d); setSel(null); setDirty(false); setLib(null); };
@@ -261,7 +276,7 @@ export default function DesignerScreen({ store = apiStore, initial, onUseInQuote
             <button className="dz-b" onClick={redo} disabled={!future.current.length} aria-label="Redo">↷ Redo</button>
             <button className="dz-b" onClick={newDesign}>New</button>
             <button className="dz-b" onClick={openLib}>Library</button>
-            <button className="dz-b pri" onClick={save}>Save</button>
+            <button className="dz-b pri" onClick={save}>Save Open Product</button>
           </div>
         </div>
       </header>
@@ -403,7 +418,7 @@ export default function DesignerScreen({ store = apiStore, initial, onUseInQuote
               <button className="dz-b" onClick={exportSvg}>Download SVG</button>
             </div>
             {onUseInQuote && <button className="dz-b pri full" onClick={useInQuote}>Use in quote</button>}
-            <p className="dz-mute">Invoice symbol: bold frame, blue glass (grey for doors), transparent background. Ready for quotes and invoices.</p>
+            <p className="dz-mute">Saving or downloading creates an Open Product at the beginning of Choose Product, in this Library, and in Admin Products.</p>
           </section>
         </aside>
       </div>

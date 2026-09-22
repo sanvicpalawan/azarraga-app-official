@@ -14,6 +14,9 @@ export type Product = {
   imageKey: string | null;
   imagePath: string | null;
   imageUrl: string | null;
+  productKey: string | null;
+  designId: string | null;
+  isCustom: boolean;
   updatedAt: string;
 };
 export type Settings = {

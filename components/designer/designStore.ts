@@ -3,6 +3,7 @@ import type { Design } from './designer-core';
 export interface DesignStore {
   list(): Promise<Design[]>;
   save(d: Design): Promise<void>;
+  publish?(d: Design, imageDataUrl: string): Promise<{ productId: number; productKey: string }>;
   remove(id: string): Promise<void>;
 }
 
@@ -39,6 +40,18 @@ export const apiStore: DesignStore = {
       body: JSON.stringify(design),
     });
     if (!response.ok) throw new Error('Could not save design.');
+  },
+  async publish(design, imageDataUrl) {
+    const response = await fetch('/api/designs/publish', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ design, imageDataUrl }),
+    });
+    const payload = (await response.json()) as { productId?: number; productKey?: string; error?: string };
+    if (!response.ok || !payload.productId || !payload.productKey) {
+      throw new Error(payload.error || 'Could not save open product.');
+    }
+    return { productId: payload.productId, productKey: payload.productKey };
   },
   async remove(id) {
     const response = await fetch(`/api/designs/${encodeURIComponent(id)}`, {
