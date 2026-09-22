@@ -1,0 +1,75 @@
+name: Deploy probe (temporary)
+
+# TEMPORARY diagnostic. Reports exactly what the production deployment serves so
+# the asset check can be trusted. Publishes to .arena-verify/probe.txt.
+
+on:
+  push:
+    branches: ["arena/01a0c60d-azarraga-app-official"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Probe deployed assets
+        continue-on-error: true
+        run: |
+          {
+          set +e
+          BASE="https://azarragaglass.vercel.app"
+          echo "probe: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          curl -sS "$BASE/" -o /tmp/home.html -D /tmp/head.txt
+          echo
+          echo "=== response headers (selected) ==="
+          grep -iE "^(age|cache-control|etag|x-vercel|server):" /tmp/head.txt | head -8
+          echo
+          echo "=== build id in HTML ==="
+          grep -o '"buildId":"[^"]*"' /tmp/home.html | head -2
+          echo
+          echo "=== inline <style> blocks: $(grep -c '<style' /tmp/home.html) ==="
+          echo "inline style has overflow-x: $(grep -c 'overflow-x' /tmp/home.html)"
+          echo "inline style has admin-table: $(grep -c 'admin-table' /tmp/home.html)"
+          echo
+          echo "=== every _next asset URL in the HTML ==="
+          grep -o '/_next/[A-Za-z0-9._/?=%-]*' /tmp/home.html | sort -u | tee /tmp/assets.txt
+          echo
+          echo "=== fetch each asset and search it ==="
+          while read -r a; do
+            [ -z "$a" ] && continue
+            CODE=$(curl -sS -o /tmp/asset.bin -w '%{http_code}' "$BASE$a")
+            SIZE=$(wc -c < /tmp/asset.bin)
+            HITS=""
+            grep -q "Match names to products" /tmp/asset.bin && HITS="$HITS BUTTON_TEXT"
+            grep -q "autoAssign" /tmp/asset.bin && HITS="$HITS AUTOFN"
+            grep -q "admin-table" /tmp/asset.bin && HITS="$HITS ADMIN_TABLE"
+            grep -q "overflow-x" /tmp/asset.bin && HITS="$HITS OVERFLOWX"
+            grep -q "Image Library" /tmp/asset.bin && HITS="$HITS LIBRARY_STR"
+            echo "  $CODE $(printf '%8s' "$SIZE")B  $a  ->${HITS:- (nothing)}"
+          done < /tmp/assets.txt
+          echo
+          echo "=== deployed page.js has the button? ==="
+          for p in /_next/static/chunks/app/page.js "/_next/static/chunks/app/page.js"; do
+            C=$(curl -sS -o /tmp/p.js -w '%{http_code}' "$BASE$p"); echo "  $p -> HTTP $C, $(wc -c < /tmp/p.js) bytes"
+          done
+          } 2>&1 | tee /tmp/probe.txt
+
+      - name: Publish probe
+        if: always()
+        run: |
+          set +e
+          git config user.name "arena-live-verify"
+          git config user.email "arena-live-verify@users.noreply.github.com"
+          mkdir -p .arena-verify
+          cp /tmp/probe.txt .arena-verify/probe.txt
+          git add -f .arena-verify/probe.txt
+          git commit -m "chore: deploy probe [skip ci]"
+          git push origin HEAD:arena/01a0c60d-azarraga-app-official
