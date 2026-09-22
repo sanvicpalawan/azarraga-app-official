@@ -2,6 +2,9 @@ import type { Attribute, Catalog, Category, Product, Settings } from "./catalog-
 import type {
   AttributeType,
   CatalogBackend,
+  MediaAsset,
+  MediaInput,
+  MediaUsage,
   Overview,
   ProductInput,
   ProductRecord,
@@ -11,11 +14,6 @@ import type {
   StoredFile,
 } from "./catalog-store-types";
 import { getDb, readySchema, type Db } from "./db";
-import {
-  deleteObject as removeStoredObject,
-  getObject as readStoredObject,
-  uploadObject as writeStoredObject,
-} from "./s3";
 
 type Row = Record<string, unknown>;
 
@@ -120,6 +118,52 @@ function toRecord(product: Product): ProductRecord {
   };
 }
 
+/**
+ * The image library row. `used_by` arrives as a JSON aggregate of the products
+ * whose image points at this key (the Neon driver returns json as a JS value,
+ * but a string is handled too for safety).
+ */
+function mapMedia(row: Row): MediaAsset {
+  const raw = row.used_by;
+  let usedBy: MediaUsage[] = [];
+  if (Array.isArray(raw)) {
+    usedBy = raw as MediaUsage[];
+  } else if (typeof raw === "string" && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw) as MediaUsage[];
+      if (Array.isArray(parsed)) usedBy = parsed;
+    } catch {
+      usedBy = [];
+    }
+  }
+  const id = num(row.id);
+  return {
+    id,
+    key: str(row.key),
+    filename: str(row.filename),
+    contentType: str(row.content_type),
+    sizeBytes: num(row.size_bytes),
+    createdAt: iso(row.created_at),
+    url: `/api/media/${id}`,
+    usedBy: usedBy.map((item) => ({ id: num(item.id), name: str(item.name) })),
+  };
+}
+
+const MEDIA_SELECT = `
+  select m.id, m.key, m.filename, m.content_type, m.size_bytes, m.created_at,
+         coalesce(
+           (select json_agg(json_build_object('id', p.id, 'name', p.name) order by p.name)
+            from products p where p.image_key = m.key),
+           '[]'::json
+         ) as used_by
+  from media m`;
+
+function extensionForContentType(contentType: string): string {
+  if (contentType === "image/webp") return "webp";
+  if (contentType === "image/jpeg") return "jpg";
+  return "png";
+}
+
 function mapQuotation(row: Row): Quotation {
   const item = (
     typeof row.item === "object" && row.item !== null
@@ -141,13 +185,6 @@ function mapQuotation(row: Row): Quotation {
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };
-}
-
-function ignoreS3CleanupError(error: unknown): void {
-  console.error(
-    "Object storage cleanup failed; the object may need manual removal.",
-    error,
-  );
 }
 
 async function getSettingsDirect(db: Db): Promise<Settings> {
@@ -282,9 +319,7 @@ function createDbBackend(): CatalogBackend {
       const product = await selectProductView(db, id);
       if (!product) return undefined;
       await db`delete from products where id = ${id}`;
-      if (product.imageKey) {
-        await removeStoredObject(product.imageKey).catch(ignoreS3CleanupError);
-      }
+      // Its image belongs to the shared library and is kept for reuse.
       return toRecord(product);
     },
 
@@ -366,55 +401,118 @@ function createDbBackend(): CatalogBackend {
       return Boolean(row);
     },
 
+    /**
+     * Product photos and the company logo are stored inside Neon Postgres as
+     * base64 text, so image uploads need no second provider and no extra
+     * environment variables — the database connection is enough.
+     */
     async saveFile(
       prefix: string,
       extension: string,
       body: ArrayBuffer,
       contentType: string,
     ): Promise<string> {
+      await readySchema();
+      const db = getDb();
       const key = `${prefix}/${crypto.randomUUID()}.${extension}`;
-      await writeStoredObject(key, body, contentType);
+      await db`
+        insert into files (key, content_type, size_bytes, data)
+        values (${key}, ${contentType}, ${body.byteLength}, ${Buffer.from(body).toString("base64")})`;
       return key;
     },
 
     async getFile(key: string): Promise<StoredFile | undefined> {
-      return readStoredObject(key);
+      await readySchema();
+      const [row] = await getDb()`
+        select content_type, data from files where key = ${key}`;
+      if (!row) return undefined;
+      const buffer = Buffer.from(str((row as Row).data), "base64");
+      const body = buffer.buffer.slice(
+        buffer.byteOffset,
+        buffer.byteOffset + buffer.byteLength,
+      ) as ArrayBuffer;
+      return {
+        body,
+        contentType: str((row as Row).content_type) || "application/octet-stream",
+        etag: `"${key.replace(/[^a-z0-9]/gi, "")}"`,
+      };
     },
 
     async removeFile(key: string | null | undefined): Promise<void> {
-      if (key) {
-        await removeStoredObject(key).catch(ignoreS3CleanupError);
-      }
+      if (!key) return;
+      await readySchema();
+      await getDb()`delete from files where key = ${key}`;
     },
 
-    async replaceProductImage(
-      id: number,
-      key: string,
+    async listMedia(): Promise<MediaAsset[]> {
+      await readySchema();
+      const db = getDb();
+      const rows = await db`${db.unsafe(MEDIA_SELECT)}
+        order by m.created_at desc, m.id desc`;
+      return rows.map((row: Row) => mapMedia(row));
+    },
+
+    async getMedia(id: number): Promise<MediaAsset | undefined> {
+      await readySchema();
+      const db = getDb();
+      const rows = await db`${db.unsafe(MEDIA_SELECT)} where m.id = ${id}`;
+      const row = rows[0] as Row | undefined;
+      return row ? mapMedia(row) : undefined;
+    },
+
+    async addMedia(input: MediaInput): Promise<MediaAsset> {
+      await readySchema();
+      const db = getDb();
+      const key = await this.saveFile(
+        "library",
+        extensionForContentType(input.contentType),
+        input.body,
+        input.contentType,
+      );
+      const [row] = await db`
+        insert into media (key, filename, content_type, size_bytes)
+        values (${key}, ${input.filename}, ${input.contentType}, ${input.sizeBytes})
+        returning id, key, filename, content_type, size_bytes, created_at`;
+      return mapMedia(row as Row);
+    },
+
+    async deleteMedia(id: number): Promise<boolean> {
+      await readySchema();
+      const db = getDb();
+      const [row] = await db`select key from media where id = ${id}`;
+      if (!row) return false;
+      const key = str((row as Row).key);
+      const [inUse] = await db`
+        select count(*) as count from products where image_key = ${key}`;
+      if (num((inUse as Row).count) > 0) {
+        throw new Error("Image is in use");
+      }
+      await db`delete from media where id = ${id}`;
+      await db`delete from files where key = ${key}`;
+      return true;
+    },
+
+    async attachMediaToProduct(
+      productId: number,
+      mediaId: number,
     ): Promise<Product | undefined> {
       await readySchema();
       const db = getDb();
-      const product = await selectProductView(db, id);
+      const [media] = await db`select key from media where id = ${mediaId}`;
+      if (!media) throw new Error("Image not found");
+      const product = await selectProductView(db, productId);
       if (!product) return undefined;
-      const previousKey = product.imageKey;
+      // The object stays in the library, so it is never deleted here.
       await db`
         update products
-        set image_key = ${key}, image_path = null, updated_at = now()
-        where id = ${id}`;
-      if (previousKey && previousKey !== key) {
-        await removeStoredObject(previousKey).catch(ignoreS3CleanupError);
-      }
-      return selectProductView(db, id);
+        set image_key = ${str((media as Row).key)}, image_path = null, updated_at = now()
+        where id = ${productId}`;
+      return selectProductView(db, productId);
     },
 
-    async clearProductImage(id: number): Promise<void> {
+    async detachProductImage(id: number): Promise<void> {
       await readySchema();
-      const db = getDb();
-      const product = await selectProductView(db, id);
-      if (!product) return;
-      if (product.imageKey) {
-        await removeStoredObject(product.imageKey).catch(ignoreS3CleanupError);
-      }
-      await db`
+      await getDb()`
         update products
         set image_key = null, image_path = null, updated_at = now()
         where id = ${id}`;
@@ -427,7 +525,7 @@ function createDbBackend(): CatalogBackend {
       await db`update settings set logo_key = ${key}, updated_at = now() where id = 1`;
       const previousKey = settings.logoKey;
       if (previousKey && previousKey !== key) {
-        await removeStoredObject(previousKey).catch(ignoreS3CleanupError);
+        await db`delete from files where key = ${previousKey}`;
       }
       return getSettingsDirect(db);
     },
@@ -475,7 +573,8 @@ function createDbBackend(): CatalogBackend {
                coalesce((select sum(grand_total) from quotations), 0)::float8 as total_revenue,
                coalesce((select sum(total_sqft) from quotations), 0)::float8 as total_sqft,
                (select count(*) from products)::int as total_products,
-               (select count(*) from categories)::int as total_categories`;
+               (select count(*) from categories)::int as total_categories,
+               (select count(*) from media)::int as total_media`;
       const values = row as Row;
       return {
         totalQuotes: num(values.total_quotes),
@@ -483,6 +582,7 @@ function createDbBackend(): CatalogBackend {
         totalSqft: num(values.total_sqft),
         totalProducts: num(values.total_products),
         totalCategories: num(values.total_categories),
+        totalMedia: num(values.total_media),
       };
     },
   };

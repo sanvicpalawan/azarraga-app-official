@@ -1,14 +1,18 @@
-# Handoff — Neon Postgres + S3 image storage integration
+# Handoff — Neon Postgres integration (data + images)
 
 **Repo:** `sanvicpalawan/azarraga-app-official` · **Branch:** `arena/01a0c3d2-azarraga-app-official`
-**Status:** Code complete, built, and locally verified. **Remaining work is deployment configuration only** (Vercel env vars + one live verification run). No application code is left to write.
+**Status:** Code complete and verified live against production (see §2b). Neon Postgres
+handles everything — catalog, quotations, and the images themselves — so the only environment
+variable required is `DATABASE_URL` (injected by the Neon → Vercel integration). The earlier
+S3/object-storage requirement is gone: `@aws-sdk/client-s3` was removed and image bytes are
+now stored in the database.
 
 ---
 
 ## 1. What was done
 
 The app's catalog store was converted from an in-memory global into a swappable
-backend with **Neon Postgres + S3-compatible object storage** as the production
+backend with **Neon Postgres (data and images)** as the production
 path:
 
 | File | Role |
@@ -17,9 +21,9 @@ path:
 | `lib/catalog-store-types.ts` | Shared types + the `CatalogBackend` contract both implementations satisfy. |
 | `lib/catalog-seed.ts` | The default catalog (3 categories, 21 attributes, 28 products, ₱1,850 four-panel window) — single source of truth for both backends. |
 | `lib/db.ts` | Neon client (`@neondatabase/serverless`), idempotent DDL (`categories`, `attributes`, `products`, `settings`, `quotations`), and **automatic first-use seeding in one transaction** (schema creates itself on the first request — nothing to run manually). |
-| `lib/catalog-db-store.ts` | Postgres + S3 backend: all catalog CRUD, quotations, settings, and image/logo storage via S3 object keys stored on the product/settings rows. |
+| `lib/catalog-db-store.ts` | Neon backend: all catalog CRUD, quotations, settings, the image library, and image/logo byte storage in the `files` table. |
 | `lib/catalog-memory-store.ts` | The original in-memory implementation, kept as the no-`DATABASE_URL` fallback. |
-| `lib/s3.ts` | S3-compatible client (`@aws-sdk/client-s3`) for the image bucket — works with AWS S3 or any S3 endpoint (R2, etc.) via `AWS_ENDPOINT_URL_S3`. |
+| `lib/db.ts` (`files` table) | Image bytes are stored in Neon Postgres itself as base64 rows, keyed from `products.image_key` / `settings.logo_key`. No object-storage provider and no extra environment variables. |
 | `app/api/**` (12 routes) | Same HTTP contracts as before; now `await` the async store. Read routes return **503 with a clear message** when the backend is unreachable, instead of crashing. |
 | `scripts/verify-neon.ts` | `pnpm verify:neon` — live end-to-end check (see §4). |
 | `package.json` | New deps: `@neondatabase/serverless`, `@aws-sdk/client-s3`; dev dep `tsx` (runs the verify script). New script: `verify:neon`. |
@@ -44,6 +48,37 @@ it only talks to the HTTP API, whose shape is byte-for-byte identical.
 against the real Neon database and image bucket. That is the one remaining
 proof and it requires the real credentials in the environment (below).
 
+## 2b. Verified live against production — 2026-09-21 22:27 UTC
+
+Run against the deployed app (<https://azarragaglass.vercel.app>) over the public internet
+by a temporary GitHub Actions workflow — since deleted — that exercised the write paths and
+then cleaned up after itself. Run:
+<https://github.com/sanvicpalawan/azarraga-app-official/actions/runs/35662715027>
+
+| Check | Result |
+| --- | --- |
+| `GET /api/catalog` | PASS — 200, 28 products / 3 categories / 21 attributes |
+| `POST /api/products` | PASS — 201, new row created |
+| read-back through `GET /api/products` | PASS — row present on a separate request |
+| `PUT /api/admin/settings` | PASS — 200, settings byte-identical after the write |
+| `POST` then `DELETE /api/categories` | PASS — 201 then 200 |
+| `DELETE /api/products/:id` | PASS — 200; catalog back to the 28-row baseline, no leftovers |
+| `POST /api/products/:id/image` (object-storage write) | **FAIL — 503 "The image could not be uploaded."** |
+| `GET /api/products/:id/image` (object-storage read) | **FAIL — 404** (no image was ever stored) |
+
+**Neon Postgres is healthy in production**: SELECT, INSERT, UPDATE and DELETE all round-trip
+and the identity sequences are aligned.
+
+**Note on the two FAILs above:** those rows describe the *old* architecture, where images were
+kept in S3-compatible object storage. That dependency has since been removed — image bytes now
+live in Neon Postgres in the `files` table — so those two checks no longer describe the app.
+Re-run the image check after the next deploy to confirm uploads end to end.
+
+Not covered: the quotation write path (`POST /api/quotations`) — the API has no DELETE route
+for quotations, so a test insert would leave a junk row in real data. Making that path
+testable means adding `DELETE /api/quotations/:id`, or pointing a verification run at a
+throwaway Neon branch.
+
 ## 3. Account integrations already in place (confirmed by the owner)
 
 - **Neon → Vercel integration:** adds `DATABASE_URL` (and `DATABASE_URL_UNPOOLED`) to the Vercel project automatically. **Nothing to do for the database.**
@@ -52,26 +87,12 @@ proof and it requires the real credentials in the environment (below).
 
 ## 4. What's next (the only remaining work)
 
-### Step 1 — Add the object-storage variables in Vercel
+### Step 1 — Environment variables
 
-Neon's Vercel integration supplies `DATABASE_URL`. The **five** variables below
-must be added manually in **Vercel → project → Settings → Environment
-Variables** (Production environment — or all environments):
-
-```text
-AWS_ENDPOINT_URL_S3    (the image bucket's S3 API endpoint, e.g. Cloudflare R2)
-AWS_ACCESS_KEY_ID
-AWS_SECRET_ACCESS_KEY
-AWS_REGION
-S3_BUCKET              (e.g. azarraga-images)
-```
-
-Optional: `S3_PUBLIC_BASE_URL` (public hostname of the bucket, e.g.
-`https://pub-xxxx.r2.dev`) — lets `verify:neon` check public object URLs
-directly. Without it that one check is reported as a skip, not a failure.
-
-> Security: these values belong in Vercel/Neon, never in the repo, chat, or
-> this document. `.env*` is gitignored.
+**Nothing to add.** Images are stored in Neon Postgres like the rest of the data, so
+`DATABASE_URL` (supplied automatically by the Neon → Vercel integration) is the only variable
+required. If the five `S3_*` / `AWS_*` variables from the earlier plan were already added in
+Vercel, they can be deleted — the app no longer reads them.
 
 ### Step 2 — Deploy
 
@@ -81,6 +102,10 @@ from GitHub. **On first request after deploy, the schema is created and the
 default catalog seeded automatically** — no manual migration step.
 
 ### Step 3 — Prove it live (pick one)
+
+> Already partly done: the §2b run covered the read endpoints plus the product, settings, and
+> category write paths against production. What is left to prove is the object-storage upload
+> and the quotation round-trip.
 
 **Option A — from any machine with Neon network access** (recommended):
 
@@ -109,8 +134,6 @@ the bucket). Quotation save + reprint round-trip exercises the quotations table.
 ### Step 4 — Sanity checks if something is off
 
 - `/api/catalog` returns 503 → `DATABASE_URL` missing/wrong in the Vercel environment (check Vercel → Deployments → environment variables; re-deploy after adding variables).
-- Catalog loads but image upload returns 503 → the five S3 variables are missing/mistyped.
-- Image upload works but the image 404s → `S3_BUCKET` name or endpoint mismatch.
 - Verify script can't reach Neon → run it from a machine that can reach the Neon data plane (the sandbox limitation is network-level, not credentials).
 
 ## 5. Known quirks (pre-existing, not regressions)
@@ -127,5 +150,5 @@ pnpm dev              # local, in-memory mode (no env needed)
 pnpm build && pnpm start
 pnpm lint
 pnpm exec tsc --noEmit
-pnpm verify:neon      # live Neon + S3 verification (needs the 5-6 env vars)
+pnpm verify:neon      # live Neon verification incl. image storage (needs DATABASE_URL)
 ```

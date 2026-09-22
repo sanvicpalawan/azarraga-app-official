@@ -2,6 +2,9 @@ import type { Attribute, Catalog, Category, Product, Settings } from "./catalog-
 import type {
   AttributeType,
   CatalogBackend,
+  MediaAsset,
+  MediaInput,
+  MediaUsage,
   Overview,
   ProductInput,
   ProductRecord,
@@ -12,17 +15,29 @@ import type {
 } from "./catalog-store-types";
 import { buildDefaultCatalogData } from "./catalog-seed";
 
+/** A library image as stored in memory; the view adds usage and the URL. */
+type MediaRecord = {
+  id: number;
+  key: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
+};
+
 type CatalogState = {
   settings: Settings;
   categories: Category[];
   attributes: Attribute[];
   products: ProductRecord[];
   quotations: Quotation[];
+  media: MediaRecord[];
   files: Map<string, StoredFile>;
   nextProductId: number;
   nextCategoryId: number;
   nextAttributeId: number;
   nextQuotationId: number;
+  nextMediaId: number;
 };
 
 function createInitialState(): CatalogState {
@@ -34,12 +49,27 @@ function createInitialState(): CatalogState {
     attributes: data.attributes.map((attribute) => ({ ...attribute })),
     products: data.products.map((product) => ({ ...product })),
     quotations: [],
+    media: [],
     files: new Map(),
     nextProductId: data.products.length + 1,
     nextCategoryId: data.categories.length + 1,
     nextAttributeId: data.attributes.length + 1,
     nextQuotationId: 1,
+    nextMediaId: 1,
   };
+}
+
+function toMediaView(store: CatalogState, record: MediaRecord): MediaAsset {
+  const usedBy: MediaUsage[] = store.products
+    .filter((product) => product.imageKey === record.key)
+    .map((product) => ({ id: product.id, name: product.name }));
+  return { ...record, url: `/api/media/${record.id}`, usedBy };
+}
+
+function extensionForContentType(contentType: string): string {
+  if (contentType === "image/webp") return "webp";
+  if (contentType === "image/jpeg") return "jpg";
+  return "png";
 }
 
 function getGlobalStore(): CatalogState {
@@ -318,25 +348,80 @@ export function getMemoryBackend(): CatalogBackend {
         removeStoredFile(key);
       },
 
-      async replaceProductImage(
-        id: number,
-        key: string,
+      async listMedia(): Promise<MediaAsset[]> {
+        const store = getGlobalStore();
+        return store.media
+          .slice()
+          .sort((a, b) =>
+            b.createdAt === a.createdAt
+              ? b.id - a.id
+              : b.createdAt.localeCompare(a.createdAt),
+          )
+          .map((record) => toMediaView(store, record));
+      },
+
+      async getMedia(id: number): Promise<MediaAsset | undefined> {
+        const store = getGlobalStore();
+        const record = store.media.find((item) => item.id === id);
+        return record ? toMediaView(store, record) : undefined;
+      },
+
+      async addMedia(input: MediaInput): Promise<MediaAsset> {
+        const store = getGlobalStore();
+        const key = createFileKey(
+          "library",
+          extensionForContentType(input.contentType),
+        );
+        store.files.set(key, {
+          body: input.body,
+          contentType: input.contentType,
+          etag: `"${key.replace(/[^a-z0-9]/gi, "")}"`,
+        });
+        const record: MediaRecord = {
+          id: store.nextMediaId++,
+          key,
+          filename: input.filename,
+          contentType: input.contentType,
+          sizeBytes: input.sizeBytes,
+          createdAt: new Date().toISOString(),
+        };
+        store.media.push(record);
+        return toMediaView(store, record);
+      },
+
+      async deleteMedia(id: number): Promise<boolean> {
+        const store = getGlobalStore();
+        const index = store.media.findIndex((item) => item.id === id);
+        if (index < 0) return false;
+        const record = store.media[index];
+        if (store.products.some((product) => product.imageKey === record.key)) {
+          throw new Error("Image is in use");
+        }
+        store.media.splice(index, 1);
+        removeStoredFile(record.key);
+        return true;
+      },
+
+      async attachMediaToProduct(
+        productId: number,
+        mediaId: number,
       ): Promise<Product | undefined> {
         const store = getGlobalStore();
-        const product = store.products.find((item) => item.id === id);
+        const record = store.media.find((item) => item.id === mediaId);
+        if (!record) throw new Error("Image not found");
+        const product = store.products.find((item) => item.id === productId);
         if (!product) return undefined;
-        removeStoredFile(product.imageKey);
-        product.imageKey = key;
+        // The library keeps the object, so nothing is removed from `files`.
+        product.imageKey = record.key;
         product.imagePath = null;
         product.updatedAt = new Date().toISOString();
         return toProductView(product);
       },
 
-      async clearProductImage(id: number): Promise<void> {
+      async detachProductImage(id: number): Promise<void> {
         const store = getGlobalStore();
         const product = store.products.find((item) => item.id === id);
         if (!product) return;
-        removeStoredFile(product.imageKey);
         product.imageKey = null;
         product.imagePath = null;
         product.updatedAt = new Date().toISOString();
@@ -395,6 +480,7 @@ export function getMemoryBackend(): CatalogBackend {
           ),
           totalProducts: store.products.length,
           totalCategories: store.categories.length,
+          totalMedia: store.media.length,
         };
       },
     };
