@@ -13,7 +13,6 @@
     "verify:neon": "tsx scripts/verify-neon.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1136.0",
     "@base-ui/react": "^1.7.0",
     "@hookform/resolvers": "^5.7.1",
     "@neondatabase/serverless": "^1.1.0",

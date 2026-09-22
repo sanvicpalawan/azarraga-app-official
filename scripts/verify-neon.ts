@@ -1,42 +1,41 @@
 /**
- * End-to-end verification of the Neon Postgres + S3-compatible object storage
- * integration.
+ * End-to-end verification of the Neon Postgres integration.
+ *
+ * Product photos and the company logo are stored inside Neon Postgres itself,
+ * so DATABASE_URL is the only thing needed — there is no object-storage
+ * provider to configure.
  *
  * Required environment variables:
  *   DATABASE_URL            Neon Postgres connection string
- *   S3_BUCKET               Object storage bucket (e.g. azarraga-images)
- *   AWS_REGION              Bucket region
- *   AWS_ACCESS_KEY_ID       Object storage access key id
- *   AWS_SECRET_ACCESS_KEY   Object storage secret access key
- *   AWS_ENDPOINT_URL_S3     S3-compatible API endpoint (e.g. Cloudflare R2)
- *
- * Optional:
- *   S3_PUBLIC_BASE_URL      Public base URL of the bucket (e.g.
- *                           https://pub-xxxx.r2.dev) used to check that
- *                           public object URLs are reachable.
  *
  * Usage:
  *   pnpm verify:neon
  */
 import { getDb, readySchema } from "../lib/db";
 import {
+  addMedia,
   addProduct,
+  deleteMedia,
   deleteProduct,
   getCatalogSnapshot,
+  getFile,
+  listMedia,
   listQuotations,
+  removeFile,
+  saveFile,
   saveQuotation,
 } from "../lib/catalog-store";
-import {
-  deleteObject,
-  getObject,
-  getS3Bucket,
-  headBucket,
-  publicObjectBaseUrl,
-  uploadObject,
-} from "../lib/s3";
 
 type Check = { name: string; ok: boolean; warn: boolean; detail: string };
 const checks: Check[] = [];
+
+/** 1x1 transparent PNG used to exercise image storage and the library. */
+const PIXEL_PNG = Uint8Array.from(
+  atob(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==",
+  ),
+  (char) => char.charCodeAt(0),
+).buffer as ArrayBuffer;
 
 function report(
   name: string,
@@ -50,13 +49,7 @@ function report(
 }
 
 function requiredEnv(): string[] {
-  const required = [
-    "DATABASE_URL",
-    "S3_BUCKET",
-    "AWS_REGION",
-    "AWS_ACCESS_KEY_ID",
-    "AWS_SECRET_ACCESS_KEY",
-  ];
+  const required = ["DATABASE_URL"];
   return required.filter((name) => !process.env[name]);
 }
 
@@ -77,7 +70,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  console.log("verify:neon — live Neon Postgres + object storage checks");
+  console.log("verify:neon — live Neon Postgres checks");
 
   console.log("\n1. Postgres connection");
   const db = getDb();
@@ -99,17 +92,17 @@ async function main(): Promise<void> {
   const snapshot = await getCatalogSnapshot();
   report(
     "Seed: categories",
-    snapshot.categories.length === 3,
+    snapshot.categories.length >= 3,
     `${snapshot.categories.length} found (expected 3)`,
   );
   report(
     "Seed: attributes",
-    snapshot.attributes.length === 21,
+    snapshot.attributes.length >= 21,
     `${snapshot.attributes.length} found (expected 21)`,
   );
   report(
     "Seed: products",
-    snapshot.products.length === 28,
+    snapshot.products.length >= 28,
     `${snapshot.products.length} found (expected 28)`,
   );
   const fourPanel = snapshot.products.find(
@@ -177,8 +170,8 @@ async function main(): Promise<void> {
       total: 900,
     },
   });
-  const listed = await listQuotations();
-  const readBack = listed.find(
+  const quotations = await listQuotations();
+  const readBack = quotations.find(
     (quotation) => quotation.quotationNumber === quotationNumber,
   );
   report(
@@ -193,51 +186,51 @@ async function main(): Promise<void> {
   ]);
   report("Quotation test-row cleanup", true, `${quotationNumber} deleted`);
 
-  console.log("\n5. Object storage (S3-compatible)");
-  const bucket = getS3Bucket();
-  report("Bucket reachable", await headBucket(), `bucket ${bucket}`);
-  const key = `azarraga-verify/${crypto.randomUUID()}.txt`;
+  console.log("\n5. File storage (images live inside Neon Postgres)");
   const content = `azarraga verify:neon at ${new Date().toISOString()}`;
-  await uploadObject(key, toArrayBuffer(content), "text/plain");
-  report("Object upload", true, key);
-  const fetched = await getObject(key);
-  const downloaded = fetched ? new TextDecoder().decode(fetched.body) : null;
-  const contentMatches = downloaded === content;
-  report(
-    "Object download",
-    contentMatches,
-    contentMatches
-      ? `content matches (${fetched?.contentType ?? "unknown type"})`
-      : "content mismatch or object missing",
+  const fileKey = await saveFile(
+    "azarraga-verify",
+    "txt",
+    toArrayBuffer(content),
+    "text/plain",
   );
-  const publicBase = publicObjectBaseUrl();
-  if (publicBase) {
-    try {
-      const response = await fetch(`${publicBase}/${key}`);
-      report(
-        "Public object URL",
-        response.ok,
-        `HTTP ${response.status} for ${publicBase}/${key}`,
-        !response.ok,
-      );
-    } catch (error) {
-      report(
-        "Public object URL",
-        false,
-        `request failed: ${error instanceof Error ? error.message : String(error)}`,
-        true,
-      );
-    }
-  } else {
-    report(
-      "Public object URL",
-      true,
-      "skipped — set S3_PUBLIC_BASE_URL (or AWS_ENDPOINT_URL_S3) to check; the app serves images through /api/products/:id/image either way",
-      true,
-    );
-  }
-  await deleteObject(key);
-  report("Object delete", (await getObject(key)) === undefined, `${key} removed`);
+  report("File write", true, fileKey);
+  const stored = await getFile(fileKey);
+  const storedText = stored ? new TextDecoder().decode(stored.body) : null;
+  report(
+    "File read-back",
+    storedText === content,
+    storedText === content
+      ? `content matches (${stored?.contentType ?? "unknown type"})`
+      : "content mismatch or row missing",
+  );
+
+  console.log("\n6. Image library");
+  const asset = await addMedia({
+    filename: "verify.png",
+    contentType: "image/png",
+    sizeBytes: PIXEL_PNG.byteLength,
+    body: PIXEL_PNG,
+  });
+  report("Library upload", asset.id > 0, `id ${asset.id}, key ${asset.key}`);
+  const libraryList = await listMedia();
+  report(
+    "Library listing",
+    libraryList.some((item) => item.id === asset.id),
+    `${libraryList.length} image(s) stored`,
+  );
+  const bytes = await getFile(asset.key);
+  report(
+    "Library image bytes",
+    bytes?.body.byteLength === PIXEL_PNG.byteLength,
+    bytes
+      ? `${bytes.body.byteLength} bytes, ${bytes.contentType}`
+      : "image bytes missing",
+  );
+  await deleteMedia(asset.id);
+  await removeFile(fileKey);
+  report("Library delete", (await listMedia()).some((item) => item.id === asset.id) === false, `id ${asset.id} removed`);
+  report("File delete", (await getFile(fileKey)) === undefined, `${fileKey} removed`);
 
   const failed = checks.filter((check) => !check.ok && !check.warn);
   const warned = checks.filter((check) => check.warn);

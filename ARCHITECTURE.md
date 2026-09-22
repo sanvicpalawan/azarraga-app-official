@@ -25,7 +25,6 @@ manage catalog + company data from a built-in admin dashboard.
 | Variants | `class-variance-authority` | 0.7.1 | 16 vendored components |
 | Validation | Zod | 3.25.76 | all write API routes |
 | Database | Neon Postgres serverless (`@neondatabase/serverless`, HTTP driver) | 1.1.0 | `lib/db.ts`, `lib/catalog-db-store.ts` |
-| Object storage | S3-compatible (`@aws-sdk/client-s3`) — AWS S3 or R2 | 3.1136.0 | `lib/s3.ts` |
 | Linting | ESLint 9 flat config + `eslint-config-next` | 9.39.4 / 16.3.4 | `eslint.config.mjs` |
 | Package manager | pnpm (Node `>=22.13.0`) | 11.25.0 | `pnpm-lock.yaml`, `.npmrc` |
 | Deploy target | Vercel + Neon integration (per `HANDOFF.md`) | — | — |
@@ -36,7 +35,8 @@ manage catalog + company data from a built-in admin dashboard.
 picks exactly one implementation:
 
 - **`DATABASE_URL` set → `lib/catalog-db-store.ts`** — Neon Postgres for catalog,
-  settings, and quotations; S3 bucket for images and the company logo. DDL is idempotent
+  settings, quotations, and image bytes for products and the company logo.
+  DDL is idempotent
   and the default catalog is auto-seeded in one transaction on first use (`lib/db.ts`), so
   there is no migration step.
 - **`DATABASE_URL` absent → `lib/catalog-memory-store.ts`** — same behaviour, all state in
@@ -94,13 +94,13 @@ Browser
                 │
         process.env.DATABASE_URL ?
           ├─ yes → lib/catalog-db-store.ts
-          │          ├── lib/db.ts   (neon(), DDL, readySchema(), transactional seed)
-          │          └── lib/s3.ts   (PutObject / GetObject / DeleteObject / HeadBucket)
+          │          └── lib/db.ts   (neon(), DDL, readySchema(), transactional seed,
+          │                             files table holding image bytes as base64 text)
           └─ no  → lib/catalog-memory-store.ts  (process-global Maps/arrays)
 ```
 
 Client-visible data never touches Postgres from the browser: images are proxied through
-`/api/products/[id]/image` and `/api/admin/settings/logo`, which stream the S3 object
+`/api/products/[id]/image` and `/api/admin/settings/logo`, which stream the stored bytes
 (`cache-control: public, max-age=3600` + ETag). `settings.logoKey` decides whether the UI
 shows the uploaded logo or the bundled `/azarraga-logo-full.jpg` / `-mark.jpg`.
 
@@ -133,7 +133,7 @@ azarraga-app-official/
 │       │   ├── route.ts                 47   GET  list · POST create (Zod productSchema, 201)
 │       │   └── [id]/
 │       │       ├── route.ts             57   PUT update · DELETE remove  (no GET → 405, pre-existing)
-│       │       └── image/route.ts      101   GET  stream S3 object (404 if none; ?download=1 sets
+│       │       └── image/route.ts      101   GET  stream stored image (404 if none; ?download=1 sets
 │       │                                            content-disposition) · POST upload
 │       │                                            (png/jpeg/webp, ≤8 MB) · DELETE clear image
 │       ├── categories/
@@ -155,7 +155,7 @@ azarraga-app-official/
 │           └── settings/
 │               ├── route.ts             55   GET company profile · PUT update (Zod-validated,
 │               │                                        email-or-empty rule)
-│               └── logo/route.ts        64   GET stream logo from S3 (404 → UI falls back to
+│               └── logo/route.ts        64   GET stream stored logo    (404 → UI falls back to
 │                                                    bundled JPG) · POST upload (≤5 MB)
 │
 ├── components/
@@ -173,9 +173,9 @@ azarraga-app-official/
 │   │                                        SettingsInput, QuotationInput, Quotation, QuotationItem,
 │   │                                        ProductRecord, StoredFile, Overview, MediaAsset,
 │   │                                        MediaInput, MediaUsage, AttributeType.
-│   ├── catalog-db-store.ts            489   Neon + S3 backend (largest hand-written file): row→domain
+│   ├── catalog-db-store.ts            500   Neon backend (largest hand-written file): row→domain
 │   │                                        mappers, SQL for every CRUD path, quotation jsonb,
-│   │                                        image key swap with best-effort S3 cleanup.
+│   │                                        image/logo bytes in the `files` table, library CRUD.
 │   ├── catalog-memory-store.ts        404   In-memory backend: process-global state, deep copies on
 │   │                                        read, same semantics as the DB backend.
 │   ├── catalog-seed.ts                148   Single seed source: defaultTerms, 21 attributes across
@@ -184,9 +184,6 @@ azarraga-app-official/
 │   │                                        products, settings, quotations), readySchema() memoised
 │   │                                        per process (failures not cached), transactional seed +
 │   │                                        setval() to realign identity sequences.
-│   ├── s3.ts                          163   S3-compatible client (forcePathStyle, AWS_ENDPOINT_URL_S3),
-│   │                                        requireS3Env() with explicit missing-var errors,
-│   │                                        upload/get/delete/headBucket, publicObjectBaseUrl().
 │   ├── catalog-types.ts                35   Domain types: Category, Attribute, Product, Settings, Catalog.
 │   └── utils.ts                         6   cn() = twMerge(clsx(...)).
 │
@@ -228,7 +225,7 @@ azarraga-app-official/
 ├── .gitignore                              node_modules, .next, .env*, next-env.d.ts, *.tsbuildinfo,
 │                                            plus checkout-local .agents/.codex/outputs/work
 ├── README.md                               Product overview, features, high-level structure
-├── HANDOFF.md                              Deployment runbook: Neon + S3 env vars, verification steps
+├── HANDOFF.md                              Deployment runbook: Neon env vars, verification steps
 └── ARCHITECTURE.md                         This document
 ```
 
@@ -273,8 +270,9 @@ Created idempotently by `DDL_STATEMENTS` in `lib/db.ts`; seeded once in a transa
 | --- | --- | --- |
 | `categories` | `id` identity PK, `name` unique, `sort_order` | 3 seeded: Windows, Doors, Others |
 | `attributes` | `id` identity PK, `type` ∈ `series\|glass\|color\|lock` (CHECK), `name`, `sort_order`, unique `(type, name)` | 21 seeded (13 series, 3 glass, 3 color, 2 lock) |
-| `products` | `id` identity PK, `name`, `category_id` FK, `base_price numeric(12,2)`, `description`, `default_series_id`/`default_glass_id` FK → attributes, `image_key`, `image_path`, `updated_at` timestamptz, unique `(category_id, name)` | 28 seeded; image resolves `image_key` (S3) → `/api/products/:id/image`, else `image_path` (bundled art) → `public/` |
-| `media` | `id` identity PK, `key` unique (S3 object), `filename`, `content_type`, `size_bytes`, `created_at` | The image library. Product photos live here too: `products.image_key` points at a `media.key`, which is how one image can be reused by several products. Deleting a library image is refused while a product still points at it |
+| `products` | `id` identity PK, `name`, `category_id` FK, `base_price numeric(12,2)`, `description`, `default_series_id`/`default_glass_id` FK → attributes, `image_key`, `image_path`, `updated_at` timestamptz, unique `(category_id, name)` | 28 seeded; image resolves `image_key` (a `media` row) → `/api/products/:id/image`, else `image_path` (bundled art) → `public/` |
+| `files` | `key` text PK (e.g. `library/<uuid>.png`), `content_type`, `size_bytes`, `data` (base64 text), `created_at` | Where the image bytes actually live — inside the database, so no object-storage provider is needed. Every product photo and the company logo is a row here |
+| `media` | `id` identity PK, `key` unique (points at a `files` row), `filename`, `content_type`, `size_bytes`, `created_at` | The image library. Product photos live here too: `products.image_key` points at a `media.key`, which is how one image can be reused by several products. Deleting a library image is refused while a product still points at it |
 | `settings` | `id` PK (single row), `company_name`, `logo_key`, address/contact/email/tin, four bank fields, `terms_conditions`, `pdf_header`, `updated_at` | Drives the printable quotation header, bank box, and terms |
 | `quotations` | `id` identity PK, `quotation_number` unique, customer/project fields, `subtotal`, `discount`, `grand_total`, `total_sqft` numeric(12,2), `item jsonb`, `status` default `'draft'`, timestamps | Item detail stored as JSONB — one row per quotation |
 
@@ -288,11 +286,6 @@ Seeding also calls `setval(pg_get_serial_sequence(...))` for `categories`, `attr
 | Variable | Needed for | Notes |
 | --- | --- | --- |
 | `DATABASE_URL` | Postgres backend | Injected automatically by the Neon → Vercel integration. Absent → in-memory mode. `DATABASE_URL_UNPOOLED` also arrives but is unused by the code. |
-| `AWS_ENDPOINT_URL_S3` | S3 endpoint | Optional for AWS S3; required for R2 and other S3-compatible hosts. Client uses `forcePathStyle: true`. |
-| `AWS_REGION` | S3 | Required by `requireS3Env()`. |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | S3 | Required; never commit (`.env*` is gitignored). |
-| `S3_BUCKET` | S3 | e.g. `azarraga-images`. |
-| `S3_PUBLIC_BASE_URL` | Optional | Public bucket hostname; only used by `verify:neon`'s public-URL check and `publicObjectBaseUrl()`. |
 
 ---
 
@@ -304,7 +297,7 @@ pnpm dev                  # in-memory mode, no env needed
 pnpm build && pnpm start  # production build (what Vercel runs)
 pnpm lint                 # eslint flat config
 pnpm exec tsc --noEmit    # strict type check
-pnpm verify:neon          # live Neon + S3 end-to-end check (needs the env vars above)
+pnpm verify:neon          # live Neon end-to-end check (needs DATABASE_URL)
 ```
 
 ---

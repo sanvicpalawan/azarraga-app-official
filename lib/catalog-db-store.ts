@@ -14,11 +14,6 @@ import type {
   StoredFile,
 } from "./catalog-store-types";
 import { getDb, readySchema, type Db } from "./db";
-import {
-  deleteObject as removeStoredObject,
-  getObject as readStoredObject,
-  uploadObject as writeStoredObject,
-} from "./s3";
 
 type Row = Record<string, unknown>;
 
@@ -190,13 +185,6 @@ function mapQuotation(row: Row): Quotation {
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };
-}
-
-function ignoreS3CleanupError(error: unknown): void {
-  console.error(
-    "Object storage cleanup failed; the object may need manual removal.",
-    error,
-  );
 }
 
 async function getSettingsDirect(db: Db): Promise<Settings> {
@@ -413,25 +401,47 @@ function createDbBackend(): CatalogBackend {
       return Boolean(row);
     },
 
+    /**
+     * Product photos and the company logo are stored inside Neon Postgres as
+     * base64 text, so image uploads need no second provider and no extra
+     * environment variables — the database connection is enough.
+     */
     async saveFile(
       prefix: string,
       extension: string,
       body: ArrayBuffer,
       contentType: string,
     ): Promise<string> {
+      await readySchema();
+      const db = getDb();
       const key = `${prefix}/${crypto.randomUUID()}.${extension}`;
-      await writeStoredObject(key, body, contentType);
+      await db`
+        insert into files (key, content_type, size_bytes, data)
+        values (${key}, ${contentType}, ${body.byteLength}, ${Buffer.from(body).toString("base64")})`;
       return key;
     },
 
     async getFile(key: string): Promise<StoredFile | undefined> {
-      return readStoredObject(key);
+      await readySchema();
+      const [row] = await getDb()`
+        select content_type, data from files where key = ${key}`;
+      if (!row) return undefined;
+      const buffer = Buffer.from(str((row as Row).data), "base64");
+      const body = buffer.buffer.slice(
+        buffer.byteOffset,
+        buffer.byteOffset + buffer.byteLength,
+      ) as ArrayBuffer;
+      return {
+        body,
+        contentType: str((row as Row).content_type) || "application/octet-stream",
+        etag: `"${key.replace(/[^a-z0-9]/gi, "")}"`,
+      };
     },
 
     async removeFile(key: string | null | undefined): Promise<void> {
-      if (key) {
-        await removeStoredObject(key).catch(ignoreS3CleanupError);
-      }
+      if (!key) return;
+      await readySchema();
+      await getDb()`delete from files where key = ${key}`;
     },
 
     async listMedia(): Promise<MediaAsset[]> {
@@ -478,7 +488,7 @@ function createDbBackend(): CatalogBackend {
         throw new Error("Image is in use");
       }
       await db`delete from media where id = ${id}`;
-      await removeStoredObject(key).catch(ignoreS3CleanupError);
+      await db`delete from files where key = ${key}`;
       return true;
     },
 
@@ -515,7 +525,7 @@ function createDbBackend(): CatalogBackend {
       await db`update settings set logo_key = ${key}, updated_at = now() where id = 1`;
       const previousKey = settings.logoKey;
       if (previousKey && previousKey !== key) {
-        await removeStoredObject(previousKey).catch(ignoreS3CleanupError);
+        await db`delete from files where key = ${previousKey}`;
       }
       return getSettingsDirect(db);
     },

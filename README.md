@@ -8,7 +8,7 @@ Official web application and estimation system for **Azarraga Glass & Aluminum S
 - **React 19** and **TypeScript** in strict mode
 - **Tailwind CSS v4**, shadcn/ui components, and Lucide icons
 - **Neon Postgres** as the catalog database (products, categories, attributes, company settings, and quotations) via the `@neondatabase/serverless` driver — the schema is created and the default catalog is seeded automatically on first use
-- **S3-compatible object storage** (AWS S3 or any S3 endpoint such as Cloudflare R2) for product images and the company logo
+- **Images stored inside Neon Postgres itself** — product photos and the company logo are kept in the database, so there is no second storage provider and no extra environment variables to configure
 - Without `DATABASE_URL` the app falls back to a built-in in-memory catalog store, so local development works with zero backend setup
 
 The project is intentionally framework-native: there is no alternate Vite build, edge adapter, or provider-specific runtime required to run it.
@@ -38,10 +38,9 @@ azarraga-app-official/
 │   ├── catalog-store.ts      # Catalog API (picks the active backend)
 │   ├── catalog-store-types.ts# Shared store types and backend contract
 │   ├── catalog-seed.ts       # Default catalog used for both backends
-│   ├── catalog-db-store.ts   # Neon Postgres + S3 backend
+│   ├── catalog-db-store.ts   # Neon Postgres backend (catalog, images, quotations)
 │   ├── catalog-memory-store.ts # In-memory backend (local dev without a DB)
 │   ├── db.ts                 # Neon connection, schema, and seeding
-│   ├── s3.ts                 # S3-compatible object storage client
 │   ├── catalog-types.ts
 │   └── utils.ts
 ├── scripts/
