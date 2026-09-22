@@ -2,6 +2,8 @@ import type { Attribute, Catalog, Category, Product, Settings } from "./catalog-
 import type {
   AttributeType,
   CatalogBackend,
+  MediaAsset,
+  MediaInput,
   Overview,
   ProductInput,
   ProductRecord,
@@ -15,6 +17,9 @@ import { getMemoryBackend } from "./catalog-memory-store";
 
 export type {
   AttributeType,
+  MediaAsset,
+  MediaInput,
+  MediaUsage,
   Overview,
   ProductInput,
   Quotation,
@@ -113,15 +118,31 @@ export async function removeFile(key: string | null | undefined): Promise<void> 
   return getStore().removeFile(key);
 }
 
-export async function replaceProductImage(
-  id: number,
-  key: string,
-): Promise<Product | undefined> {
-  return getStore().replaceProductImage(id, key);
+export async function listMedia(): Promise<MediaAsset[]> {
+  return getStore().listMedia();
 }
 
-export async function clearProductImage(id: number): Promise<void> {
-  return getStore().clearProductImage(id);
+export async function getMedia(id: number): Promise<MediaAsset | undefined> {
+  return getStore().getMedia(id);
+}
+
+export async function addMedia(input: MediaInput): Promise<MediaAsset> {
+  return getStore().addMedia(input);
+}
+
+export async function deleteMedia(id: number): Promise<boolean> {
+  return getStore().deleteMedia(id);
+}
+
+export async function attachMediaToProduct(
+  productId: number,
+  mediaId: number,
+): Promise<Product | undefined> {
+  return getStore().attachMediaToProduct(productId, mediaId);
+}
+
+export async function detachProductImage(id: number): Promise<void> {
+  return getStore().detachProductImage(id);
 }
 
 export async function replaceLogo(key: string): Promise<Settings> {

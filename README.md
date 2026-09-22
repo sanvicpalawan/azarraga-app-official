@@ -19,6 +19,7 @@ The project is intentionally framework-native: there is no alternate Vite build,
 - **Dynamic quotation builder**: Dimension calculations, square-foot or unit pricing, glass specifications, frame finishes, locks, and discounts.
 - **Quotation workflow**: Customer/project details, printable quotation, and browser PDF export.
 - **Admin dashboard**: Manage company details, products, pricing, categories, and dropdown attributes.
+- **Image library**: Upload photos from your device once and reuse them on any product. Uploading a product photo saves it to the library automatically, images show which products use them, and an image that is still in use cannot be deleted.
 - **Product and company imagery**: The built-in four-panel window image is served from `public/`; uploaded images are handled by standard Next.js route handlers.
 
 ## Project structure

@@ -1,7 +1,10 @@
 # Handoff — Neon Postgres + S3 image storage integration
 
 **Repo:** `sanvicpalawan/azarraga-app-official` · **Branch:** `arena/01a0c3d2-azarraga-app-official`
-**Status:** Code complete, built, and locally verified. **Remaining work is deployment configuration only** (Vercel env vars + one live verification run). No application code is left to write.
+**Status:** Code complete, deployed, and now **verified live against production** (see §2b).
+Database reads *and* writes are confirmed working on the live site. One deployment gap
+remains: **object-storage uploads return 503**, i.e. the five S3 variables in §4 Step 1 are
+still missing/misconfigured in Vercel.
 
 ---
 
@@ -44,6 +47,40 @@ it only talks to the HTTP API, whose shape is byte-for-byte identical.
 against the real Neon database and image bucket. That is the one remaining
 proof and it requires the real credentials in the environment (below).
 
+## 2b. Verified live against production — 2026-09-21 22:27 UTC
+
+Run against the deployed app (<https://azarragaglass.vercel.app>) over the public internet
+by a temporary GitHub Actions workflow — since deleted — that exercised the write paths and
+then cleaned up after itself. Run:
+<https://github.com/sanvicpalawan/azarraga-app-official/actions/runs/35662715027>
+
+| Check | Result |
+| --- | --- |
+| `GET /api/catalog` | PASS — 200, 28 products / 3 categories / 21 attributes |
+| `POST /api/products` | PASS — 201, new row created |
+| read-back through `GET /api/products` | PASS — row present on a separate request |
+| `PUT /api/admin/settings` | PASS — 200, settings byte-identical after the write |
+| `POST` then `DELETE /api/categories` | PASS — 201 then 200 |
+| `DELETE /api/products/:id` | PASS — 200; catalog back to the 28-row baseline, no leftovers |
+| `POST /api/products/:id/image` (object-storage write) | **FAIL — 503 "The image could not be uploaded."** |
+| `GET /api/products/:id/image` (object-storage read) | **FAIL — 404** (no image was ever stored) |
+
+**Neon Postgres is healthy in production**: SELECT, INSERT, UPDATE and DELETE all round-trip
+and the identity sequences are aligned. **Object storage is not working**: the upload path
+returns 503, which is what `lib/s3.ts` → `requireS3Env()` produces when the bucket variables
+are absent (a wrong credential, endpoint, or bucket name returns the same response, so the
+precise cause can't be distinguished from outside). This is consistent with §4 Step 1 never
+having been completed: `logoKey` and `imageKey` are still null on every row, so product-image
+and logo uploads are non-functional on the live site.
+
+Not covered: the quotation write path (`POST /api/quotations`) — the API has no DELETE route
+for quotations, so a test insert would leave a junk row in real data. Making that path
+testable means adding `DELETE /api/quotations/:id`, or pointing a verification run at a
+throwaway Neon branch.
+
+To close the gap: add the five S3 variables from §4 Step 1 in Vercel, redeploy, then upload
+an image through the admin UI (or re-run the workflow above).
+
 ## 3. Account integrations already in place (confirmed by the owner)
 
 - **Neon → Vercel integration:** adds `DATABASE_URL` (and `DATABASE_URL_UNPOOLED`) to the Vercel project automatically. **Nothing to do for the database.**
@@ -53,6 +90,8 @@ proof and it requires the real credentials in the environment (below).
 ## 4. What's next (the only remaining work)
 
 ### Step 1 — Add the object-storage variables in Vercel
+
+**Still outstanding — confirmed by the §2b run: image upload returns 503.**
 
 Neon's Vercel integration supplies `DATABASE_URL`. The **five** variables below
 must be added manually in **Vercel → project → Settings → Environment
@@ -81,6 +120,10 @@ from GitHub. **On first request after deploy, the schema is created and the
 default catalog seeded automatically** — no manual migration step.
 
 ### Step 3 — Prove it live (pick one)
+
+> Already partly done: the §2b run covered the read endpoints plus the product, settings, and
+> category write paths against production. What is left to prove is the object-storage upload
+> and the quotation round-trip.
 
 **Option A — from any machine with Neon network access** (recommended):
 

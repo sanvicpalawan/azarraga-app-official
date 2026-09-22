@@ -56,6 +56,31 @@ export type StoredFile = {
   etag: string;
 };
 
+/** A product (or any future record) that currently uses a library image. */
+export type MediaUsage = { id: number; name: string };
+
+/**
+ * An image in the shared image library. Every product photo lives here too, so
+ * an image uploaded for one product can be reused for another later.
+ */
+export type MediaAsset = {
+  id: number;
+  key: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
+  url: string;
+  usedBy: MediaUsage[];
+};
+
+export type MediaInput = {
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  body: ArrayBuffer;
+};
+
 export type ProductRecord = Omit<Product, "imageUrl">;
 
 export type Overview = {
@@ -64,6 +89,7 @@ export type Overview = {
   totalSqft: number;
   totalProducts: number;
   totalCategories: number;
+  totalMedia: number;
 };
 
 /**
@@ -94,8 +120,19 @@ export type CatalogBackend = {
   ): Promise<string>;
   getFile(key: string): Promise<StoredFile | undefined>;
   removeFile(key: string | null | undefined): Promise<void>;
-  replaceProductImage(id: number, key: string): Promise<Product | undefined>;
-  clearProductImage(id: number): Promise<void>;
+  /** Image library: shared image pool reused across products. */
+  listMedia(): Promise<MediaAsset[]>;
+  getMedia(id: number): Promise<MediaAsset | undefined>;
+  addMedia(input: MediaInput): Promise<MediaAsset>;
+  /** Removes a library image. Throws when a product still uses it. */
+  deleteMedia(id: number): Promise<boolean>;
+  /** Points a product at an image that already exists in the library. */
+  attachMediaToProduct(
+    productId: number,
+    mediaId: number,
+  ): Promise<Product | undefined>;
+  /** Clears a product's image without removing it from the library. */
+  detachProductImage(id: number): Promise<void>;
   replaceLogo(key: string): Promise<Settings>;
   saveQuotation(input: QuotationInput): Promise<Quotation>;
   listQuotations(): Promise<Quotation[]>;
