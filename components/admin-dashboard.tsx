@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, ImageIcon, Pencil, Plus, Save, Trash2, Upload, X } from "lucide-react";
+import { Check, Download, ImageIcon, Pencil, Plus, Save, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -184,6 +184,33 @@ export function AdminDashboard({ catalog, refresh }: Props) {
     catch (error) { flash((error as Error).message); }
   };
 
+  /** Matches library filenames to product names, e.g. "Sliding-Door.png" -> "Sliding Door". */
+  const slug = (value: string) =>
+    value.toLowerCase().replace(/\.[a-z0-9]+$/, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+  const autoAssignByFilename = async () => {
+    const free = media.filter((asset) => asset.usedBy.length === 0);
+    if (!free.length) { flash("Every image in the library is already used by a product."); return; }
+    if (!window.confirm(`Match ${free.length} unused image(s) to products by file name? Products that already have an image are skipped.`)) return;
+    let matched = 0; const unmatched: string[] = [];
+    for (const asset of free) {
+      const base = slug(asset.filename || "");
+      if (!base) { unmatched.push(asset.filename || "image"); continue; }
+      const target = catalog.products.find((product) => {
+        if (product.imageUrl) return false;
+        const name = slug(product.name);
+        return base === name || base.startsWith(`${name} `);
+      });
+      if (!target) { unmatched.push(asset.filename || "image"); continue; }
+      try {
+        await api(`/api/products/${target.id}/image`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ mediaId: asset.id }) });
+        matched += 1;
+      } catch { unmatched.push(asset.filename || "image"); }
+    }
+    await Promise.all([refresh(), loadMedia()]);
+    flash(`${matched} image(s) matched to products${unmatched.length ? ` — ${unmatched.length} could not be matched: ${unmatched.slice(0, 3).join(", ")}${unmatched.length > 3 ? "…" : ""}` : "."}`);
+  };
+
   const attachMedia = async (mediaId: number, productId: number) => {
     try {
       await api(`/api/products/${productId}/image`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ mediaId }) });
@@ -229,7 +256,7 @@ export function AdminDashboard({ catalog, refresh }: Props) {
     {tab === "products" && <div className="admin-stack">
       <div className="admin-card category-manager"><div><h3>Categories</h3><p>Add another catalog section anytime.</p></div><div className="inline-create"><Input placeholder="New category" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} /><Button onClick={addCategory}><Plus />Add</Button></div><div className="chip-row">{catalog.categories.map((category) => <span key={category.id}>{category.name}<button aria-label={`Delete ${category.name}`} onClick={() => deleteCategory(category.id)}><Trash2 /></button></span>)}</div></div>
       <div className="admin-card product-table-card"><div className="section-title"><div><h3>Products</h3><p>{catalog.products.length} products appear automatically in Choose a Product.</p></div><Button onClick={() => startProduct()}><Plus />Add Product</Button></div>
-        <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Image</th><th>Product</th><th>Category</th><th>Base Price</th><th>Defaults</th><th>Actions</th></tr></thead><tbody>{catalog.products.map((product) => <tr key={product.id}><td><div className="table-thumb">{product.imageUrl ? <img src={product.imageUrl} alt="" /> : <ImageIcon />}</div></td><td><strong>{product.name}</strong><small>{product.description}</small></td><td>{product.categoryName}</td><td>{money.format(product.basePrice)}</td><td>{product.defaultSeries || "—"}<br />{product.defaultGlass || "—"}</td><td><div className="row-actions"><Button size="icon" variant="outline" title="Edit product" onClick={() => startProduct(product)}><Pencil /></Button>{product.imageUrl && <Button size="icon" variant="outline" title="Download invoice image" asChild><a href={product.imageKey ? `/api/products/${product.id}/image?download=1` : product.imageUrl} download><Download /></a></Button>}<Button size="icon" variant="outline" title="Delete product" onClick={() => deleteProduct(product)}><Trash2 /></Button></div></td></tr>)}</tbody></table></div>
+        <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Image</th><th>Product</th><th>Category</th><th>Base Price</th><th>Defaults</th><th>Actions</th></tr></thead><tbody>{catalog.products.map((product) => <tr key={product.id}><td data-label="Image"><div className="table-thumb">{product.imageUrl ? <img src={product.imageUrl} alt="" /> : <ImageIcon />}</div></td><td data-label="Product"><strong>{product.name}</strong><small>{product.description}</small></td><td data-label="Category">{product.categoryName}</td><td data-label="Base Price">{money.format(product.basePrice)}</td><td data-label="Defaults">{product.defaultSeries || "—"}<br />{product.defaultGlass || "—"}</td><td data-label="Actions"><div className="row-actions"><Button size="icon" variant="outline" title="Edit product" onClick={() => startProduct(product)}><Pencil /></Button>{product.imageUrl && <Button size="icon" variant="outline" title="Download invoice image" asChild><a href={product.imageKey ? `/api/products/${product.id}/image?download=1` : product.imageUrl} download><Download /></a></Button>}<Button size="icon" variant="outline" title="Delete product" onClick={() => deleteProduct(product)}><Trash2 /></Button></div></td></tr>)}</tbody></table></div>
       </div>
       {(editing || productForm.categoryId > 0) && <div className="admin-card product-editor"><div className="section-title"><div><h3>{editing ? `Edit ${editing.name}` : "Add Product"}</h3><p>Its image will be normalized to the same 4:3 invoice thumbnail.</p></div><Button variant="outline" onClick={() => { setEditing(null); setProductForm(emptyProduct); }}>Close</Button></div><div className="settings-form">
         <div className="field-stack"><Label>Name</Label><Input value={productForm.name} onChange={(event) => setProductForm((value) => ({ ...value, name: event.target.value }))} /></div>
@@ -260,7 +287,10 @@ export function AdminDashboard({ catalog, refresh }: Props) {
       <div className="admin-card">
         <div className="section-title">
           <div><h3>Image Library</h3><p>Upload photos from your device once, then use them on any product.</p></div>
-          <Label className="file-button"><Upload /> Upload images<Input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => { const files = Array.from(event.target.files || []); event.target.value = ""; void uploadMedia(files); }} /></Label>
+          <div className="header-actions-inline">
+            <Button variant="outline" onClick={() => void autoAssignByFilename()}><Check /> Match names to products</Button>
+            <Label className="file-button"><Upload /> Upload images<Input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => { const files = Array.from(event.target.files || []); event.target.value = ""; void uploadMedia(files); }} /></Label>
+          </div>
         </div>
         <small>{uploading ? "Uploading…" : "PNG, JPG or WebP, up to 8 MB each. Select several files at once if you like."}</small>
       </div>

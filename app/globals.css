@@ -2,6 +2,8 @@
 @import "tw-animate-css";
 @import "../vendor/shadcn-tailwind-4.13.0.css";
 
+html, body { max-width: 100%; overflow-x: hidden; }
+
 :root {
   --background: #f3f6fa;
   --foreground: #0d2341;
@@ -82,6 +84,7 @@ button { cursor: pointer; }
 .media-meta strong { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .media-meta small { color: var(--muted-foreground); font-size: 0.75rem; }
 .media-attach { width: 100%; min-width: 150px; }
+.header-actions-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .product-image-field { grid-column: 1 / -1; }
 .product-image-picker { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
 .product-image-preview { width: 168px; height: 126px; object-fit: contain; border: 1px solid var(--border); border-radius: calc(var(--radius) - 4px); background: var(--muted); }
@@ -371,8 +374,34 @@ button { cursor: pointer; }
   .document-title-row > div:first-child > span { font-size: 1.18rem; }
   .party-grid { grid-template-columns: 1fr; }
   .party-grid section + section { border-left: 0; border-top: 1px solid #bfcddd; }
-  .quote-table { min-width: 720px; }
-  .quote-table-wrap { margin-right: -18px; padding-right: 18px; }
+  /* Tables stack into labelled blocks on phones — never sideways scrolling. */
+  .quote-table, .quote-table tbody, .quote-table tr, .quote-table td { display: block; width: 100%; min-width: 0; }
+  .quote-table thead { display: none; }
+  .quote-table tr { margin-bottom: 10px; border-bottom: 1px solid #dce4ec; padding-bottom: 6px; }
+  .quote-table td { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; border-bottom: 1px dashed #e4ebf2; padding: 7px 0; }
+  .quote-table td::before { content: attr(data-label); align-self: center; color: #52657a; font-size: .66rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+  .quote-table td > span { margin-top: 0; }
+  .quote-table-wrap { margin-right: 0; padding-right: 0; overflow: visible; }
+  .product-picture { max-width: 100%; }
+
+  .admin-table-wrap { overflow-x: visible; }
+  .admin-table, .admin-table tbody, .admin-table tr, .admin-table td { display: block; width: 100%; }
+  .admin-table thead { display: none; }
+  .admin-table tr { margin-bottom: 12px; border: 1px solid #dce5ed; border-radius: 12px; background: #fff; padding: 4px 2px; }
+  .admin-table td { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: center; border-bottom: 1px dashed #e4ebf2; padding: 9px 12px; }
+  .admin-table td:last-child { border-bottom: 0; }
+  .admin-table td::before { content: attr(data-label); color: #718197; font-size: .66rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+  .admin-table td > small { max-width: none; white-space: normal; }
+  .row-actions { flex-wrap: wrap; }
+  .admin-tabs { flex-wrap: wrap; overflow-x: visible; }
+  .admin-tabs button { padding: 9px 11px; font-size: .82rem; }
+  .header-actions-inline { display: flex; flex-wrap: wrap; gap: 8px; }
+  .file-button { max-width: 100%; }
+  .media-grid { grid-template-columns: 1fr; }
+  .media-attach { min-width: 0; }
+  .product-image-picker { flex-direction: column; }
+  .product-image-preview { width: 100%; max-width: 260px; height: auto; aspect-ratio: 4 / 3; }
+  .field-stack input, .field-stack select, .field-stack textarea { max-width: 100%; }
   .quote-bottom-grid { grid-template-columns: 1fr; }
   .totals-box { border-top: 1px solid #bdcad7; border-left: 0; }
   .mobile-nav { position: sticky; top: 0; z-index: 19; display: grid; grid-template-columns: repeat(5, 1fr); border-bottom: 1px solid #d6e0e9; background: #fff; }
