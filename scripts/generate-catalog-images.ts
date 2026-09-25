@@ -480,6 +480,90 @@ const drawings: Record<string, string> = {
       <line x1="30" y1="139" x2="330" y2="139" stroke="#cbd5e1" stroke-width="4"/>
     </g>
   `),
+
+  // 28. Tara Louver Window (Owner invoice drawing)
+  "tara-louver-window.svg": svgWrapper(340, 320, `
+    <g filter="url(#shadow)">
+      <rect x="25" y="15" width="290" height="290" fill="#2d3748" rx="2"/>
+      <rect x="35" y="25" width="270" height="270" fill="#f8fafc"/>
+      <!-- Center Mullion dividing two louver bays -->
+      <rect x="165" y="25" width="10" height="270" fill="#334155"/>
+      <!-- Bay 1 (Left) Louvers -->
+      ${[0, 1, 2, 3, 4, 5, 6].map((i) => `
+        <g transform="translate(42, ${35 + i * 35})">
+          <rect x="0" y="0" width="118" height="26" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5" rx="1"/>
+          <line x1="0" y1="26" x2="118" y2="26" stroke="#475569" stroke-width="2"/>
+        </g>
+      `).join("")}
+      <!-- Bay 2 (Right) Louvers -->
+      ${[0, 1, 2, 3, 4, 5, 6].map((i) => `
+        <g transform="translate(180, ${35 + i * 35})">
+          <rect x="0" y="0" width="118" height="26" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5" rx="1"/>
+          <line x1="0" y1="26" x2="118" y2="26" stroke="#475569" stroke-width="2"/>
+        </g>
+      `).join("")}
+      <!-- Louver operator lever -->
+      <rect x="298" y="140" width="5" height="40" rx="2" fill="#0f172a"/>
+    </g>
+  `),
+
+  // 29. Abin Sliding Window (Owner invoice drawing)
+  "abin-sliding-window.svg": svgWrapper(420, 260, `
+    <g filter="url(#shadow)">
+      <rect x="20" y="20" width="380" height="220" fill="#2d3748" rx="2"/>
+      <rect x="30" y="30" width="360" height="200" fill="#f8fafc"/>
+      <!-- Heavy duty tubular frame -->
+      <rect x="35" y="35" width="170" height="190" fill="#1e293b"/>
+      <rect x="43" y="43" width="154" height="174" fill="url(#glass-blue)"/>
+      <path d="M 140 130 L 95 130 M 110 115 L 95 130 L 110 145" fill="none" stroke="#0284c7" stroke-width="3" stroke-linecap="round"/>
+      <rect x="215" y="35" width="170" height="190" fill="#334155"/>
+      <rect x="223" y="43" width="154" height="174" fill="url(#glass-blue)"/>
+      <path d="M 270 130 L 315 130 M 300 115 L 315 130 L 300 145" fill="none" stroke="#0284c7" stroke-width="3" stroke-linecap="round"/>
+      <rect x="195" y="110" width="8" height="40" rx="3" fill="#cbd5e1"/>
+    </g>
+  `),
+
+  // 30. Pajara ED Door (Owner invoice drawing)
+  "pajara-ed-door.svg": svgWrapper(420, 340, `
+    <g filter="url(#shadow)">
+      <rect x="15" y="15" width="390" height="310" fill="#1a202c" rx="2"/>
+      <!-- Top transom panel -->
+      <rect x="25" y="25" width="370" height="60" fill="url(#glass-door)" stroke="#334155" stroke-width="2"/>
+      <text x="210" y="60" font-family="sans-serif" font-size="11" font-weight="bold" fill="#64748b" text-anchor="middle">TRANSOM 10mm ANNEALED</text>
+      <!-- Double Doors below -->
+      <rect x="25" y="92" width="180" height="223" fill="url(#glass-door)" stroke="#334155" stroke-width="2"/>
+      <rect x="215" y="92" width="180" height="223" fill="url(#glass-door)" stroke="#334155" stroke-width="2"/>
+      <!-- Stainless steel push handles -->
+      <rect x="185" y="160" width="8" height="90" rx="4" fill="#e2e8f0" stroke="#475569" stroke-width="1"/>
+      <rect x="227" y="160" width="8" height="90" rx="4" fill="#e2e8f0" stroke="#475569" stroke-width="1"/>
+    </g>
+  `),
+
+  // 31. Ranchero Bi-Fold Door (Owner invoice drawing)
+  "ranchero-bifold-door.svg": svgWrapper(440, 320, `
+    <g filter="url(#shadow)">
+      <rect x="15" y="15" width="410" height="290" fill="#2d3748" rx="2"/>
+      ${[0, 1, 2, 3].map((i) => `
+        <rect x="${25 + i * 98}" y="25" width="94" height="265" fill="#1e293b" rx="1"/>
+        <rect x="${32 + i * 98}" y="32" width="80" height="251" fill="url(#glass-blue)"/>
+        <path d="M ${32 + i * 98} 32 L ${72 + i * 98} 157 L ${32 + i * 98} 283" fill="none" stroke="#0284c7" stroke-width="2" stroke-dasharray="5 5"/>
+      `).join("")}
+      <line x1="15" y1="300" x2="425" y2="300" stroke="#cbd5e1" stroke-width="6"/>
+    </g>
+  `),
+
+  // 32. Joriz Awning Window (Owner invoice drawing)
+  "joriz-awning-window.svg": svgWrapper(340, 320, `
+    <g filter="url(#shadow)">
+      <rect x="25" y="20" width="290" height="280" fill="#2d3748" rx="2"/>
+      <!-- 3 Tier Awning -->
+      ${[0, 1, 2].map((i) => `
+        <rect x="${35}" y="${30 + i * 88}" width="270" height="80" fill="#1e293b"/>
+        <rect x="${42}" y="${37 + i * 88}" width="256" height="66" fill="url(#glass-blue)"/>
+        <path d="M 42 ${37 + i * 88} L 170 ${103 + i * 88} L 298 ${37 + i * 88}" fill="none" stroke="#0284c7" stroke-width="2.5" stroke-dasharray="6 4"/>
+      `).join("")}
+    </g>
+  `),
 };
 
 for (const [filename, content] of Object.entries(drawings)) {

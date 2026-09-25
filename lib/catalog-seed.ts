@@ -64,6 +64,11 @@ const defaultProducts: DefaultProductSeed[] = [
   { name: "Canopy", category: "Others", basePrice: 3600, description: "Aluminum and glass canopy.", series: null, glass: "Tempered", imagePath: "/product-images/canopy.svg" },
   { name: "Slide Up", category: "Others", basePrice: 1650, description: "Vertical slide-up service window.", series: "Series 798", glass: "6mm Annealed", imagePath: "/product-images/slide-up.svg" },
   { name: "Fixed-Sliding Counter Window", category: "Others", basePrice: 1950, description: "Combination fixed and sliding counter window.", series: "Series 798", glass: "6mm Annealed", imagePath: "/product-images/fixed-sliding-counter-window.svg" },
+  { name: "Tara Louver Window", category: "Windows", basePrice: 950, description: "4-inch aluminum jalousie louver window with Dark Bronze finish and 6mm annealed glass blades.", series: "4-inch", glass: "6mm Annealed", imagePath: "/product-images/tara-louver-window.svg" },
+  { name: "Abin 798 Sliding Window", category: "Windows", basePrice: 1850, description: "798 Series heavy-duty sliding window with 1 x 3 tubular frame and 6mm annealed glass.", series: "Series 798", glass: "6mm Annealed", imagePath: "/product-images/abin-sliding-window.svg" },
+  { name: "Joriz 3-Panel Awning Window", category: "Windows", basePrice: 1100, description: "38 Series 3-tier awning window configuration with powder-coated white finish.", series: "Series 38", glass: "6mm Annealed", imagePath: "/product-images/joriz-awning-window.svg" },
+  { name: "Pajara Double Leaf ED Door", category: "Doors", basePrice: 18500, description: "10mm clear annealed entrance glass door with stainless steel push/pull handles and patch fittings.", series: "Frameless", glass: "10mm Annealed", imagePath: "/product-images/pajara-ed-door.svg" },
+  { name: "Ranchero Bi-Fold 4-Leaf Door", category: "Doors", basePrice: 3200, description: "900 Series 4-leaf bi-fold folding aluminum and glass door system with heavy-duty rollers.", series: "Series 900", glass: "6mm Annealed", imagePath: "/product-images/ranchero-bifold-door.svg" },
 ];
 
 export type DefaultCatalogData = {

@@ -19,6 +19,8 @@ import {
   Save,
   Search,
   Settings2,
+  Sparkles,
+  UploadCloud,
   X,
 } from "lucide-react";
 import { AdminDashboard } from "@/components/admin-dashboard";
@@ -495,6 +497,21 @@ export default function Home() {
                 ))}
               </div>
             </div>
+
+            <div className="invoice-ocr-quick-callout">
+              <div className="callout-left">
+                <Sparkles className="w-5 h-5 text-sky-600 shrink-0" />
+                <div>
+                  <strong>Finished Projects & Invoice Drawing OCR</strong>
+                  <p>Upload invoices to extract drawings & specs directly into Products so you never have to redraw them.</p>
+                </div>
+              </div>
+              <Button size="sm" onClick={() => setScreen("projects")} className="bg-sky-700 hover:bg-sky-800 text-white shrink-0">
+                <UploadCloud className="w-4 h-4 mr-1" />
+                Upload Invoice & Extract Drawings
+              </Button>
+            </div>
+
             <div className="catalog-summary">
               <div>
                 <strong>{visibleProducts.length} products</strong>
