@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 340" width="100%" height="100%">
+  <defs>
+    <linearGradient id="glass-blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f0f7ff"/>
+      <stop offset="100%" stop-color="#bfe0f8"/>
+    </linearGradient>
+    <linearGradient id="glass-door" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f6f8fa"/>
+      <stop offset="100%" stop-color="#dbe3ea"/>
+    </linearGradient>
+    <linearGradient id="frame-dark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#36393e"/>
+      <stop offset="100%" stop-color="#23272a"/>
+    </linearGradient>
+    <pattern id="mesh" width="8" height="8" patternUnits="userSpaceOnUse">
+      <path d="M 0 0 L 8 8 M 8 0 L 0 8" fill="none" stroke="#60a5fa" stroke-width="0.5" stroke-opacity="0.35"/>
+    </pattern>
+    <pattern id="mesh-dark" width="6" height="6" patternUnits="userSpaceOnUse">
+      <path d="M 0 3 L 6 3 M 3 0 L 3 6" fill="none" stroke="#3b82f6" stroke-width="0.5" stroke-opacity="0.4"/>
+    </pattern>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <rect x="2" y="2" width="416" height="336" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  
+    <g filter="url(#shadow)">
+      <rect x="15" y="15" width="390" height="310" fill="#1a202c" rx="2"/>
+      <!-- Top transom panel -->
+      <rect x="25" y="25" width="370" height="60" fill="url(#glass-door)" stroke="#334155" stroke-width="2"/>
+      <text x="210" y="60" font-family="sans-serif" font-size="11" font-weight="bold" fill="#64748b" text-anchor="middle">TRANSOM 10mm ANNEALED</text>
+      <!-- Double Doors below -->
+      <rect x="25" y="92" width="180" height="223" fill="url(#glass-door)" stroke="#334155" stroke-width="2"/>
+      <rect x="215" y="92" width="180" height="223" fill="url(#glass-door)" stroke="#334155" stroke-width="2"/>
+      <!-- Stainless steel push handles -->
+      <rect x="185" y="160" width="8" height="90" rx="4" fill="#e2e8f0" stroke="#475569" stroke-width="1"/>
+      <rect x="227" y="160" width="8" height="90" rx="4" fill="#e2e8f0" stroke="#475569" stroke-width="1"/>
+    </g>
+  
+</svg>

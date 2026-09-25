@@ -1,4 +1,4 @@
-import type { Attribute, Catalog, Category, Product, Settings } from "./catalog-types";
+import type { Attribute, Catalog, Category, FinishedProject, FinishedProjectInput, FinishedProjectItem, Product, Settings } from "./catalog-types";
 import type {
   AttributeType,
   CatalogBackend,
@@ -14,6 +14,7 @@ import type {
   StoredFile,
 } from "./catalog-store-types";
 import { buildDefaultCatalogData } from "./catalog-seed";
+import { defaultProjectsSeed } from "./projects-seed";
 
 /** A library image as stored in memory; the view adds usage and the URL. */
 type MediaRecord = {
@@ -31,6 +32,7 @@ type CatalogState = {
   attributes: Attribute[];
   products: ProductRecord[];
   quotations: Quotation[];
+  projects: FinishedProject[];
   media: MediaRecord[];
   files: Map<string, StoredFile>;
   nextProductId: number;
@@ -38,6 +40,7 @@ type CatalogState = {
   nextAttributeId: number;
   nextQuotationId: number;
   nextMediaId: number;
+  nextProjectId: number;
 };
 
 function createInitialState(): CatalogState {
@@ -49,6 +52,10 @@ function createInitialState(): CatalogState {
     attributes: data.attributes.map((attribute) => ({ ...attribute })),
     products: data.products.map((product) => ({ ...product })),
     quotations: [],
+    projects: defaultProjectsSeed.map((project) => ({
+      ...project,
+      items: project.items.map((item) => ({ ...item })),
+    })),
     media: [],
     files: new Map(),
     nextProductId: data.products.length + 1,
@@ -56,6 +63,7 @@ function createInitialState(): CatalogState {
     nextAttributeId: data.attributes.length + 1,
     nextQuotationId: 1,
     nextMediaId: 1,
+    nextProjectId: defaultProjectsSeed.length + 1,
   };
 }
 
@@ -488,6 +496,57 @@ export function getMemoryBackend(): CatalogBackend {
           totalCategories: store.categories.length,
           totalMedia: store.media.length,
         };
+      },
+
+      async listProjects(): Promise<FinishedProject[]> {
+        return getGlobalStore()
+          .projects.slice()
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+          .map((p) => ({ ...p, items: p.items.map((i) => ({ ...i })) }));
+      },
+
+      async getProject(id: number): Promise<FinishedProject | undefined> {
+        const project = getGlobalStore().projects.find((p) => p.id === id);
+        return project ? { ...project, items: project.items.map((i) => ({ ...i })) } : undefined;
+      },
+
+      async saveProject(input: FinishedProjectInput): Promise<FinishedProject> {
+        const store = getGlobalStore();
+        const now = new Date().toISOString();
+        const existing = input.id ? store.projects.find((p) => p.id === input.id) : undefined;
+        const project: FinishedProject = {
+          id: existing?.id ?? store.nextProjectId++,
+          projectName: input.projectName,
+          clientName: input.clientName,
+          projectAddress: input.projectAddress,
+          invoiceNumber: input.invoiceNumber,
+          invoiceDate: input.invoiceDate,
+          totalAmount: input.totalAmount,
+          fileName: input.fileName,
+          fileType: input.fileType,
+          fileSize: input.fileSize,
+          fileData: input.fileData,
+          items: input.items.map((i: FinishedProjectItem) => ({ ...i })),
+          notes: input.notes,
+          status: input.status,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+        };
+        if (existing) {
+          const index = store.projects.indexOf(existing);
+          store.projects[index] = project;
+        } else {
+          store.projects.unshift(project);
+        }
+        return { ...project, items: project.items.map((i) => ({ ...i })) };
+      },
+
+      async deleteProject(id: number): Promise<boolean> {
+        const store = getGlobalStore();
+        const index = store.projects.findIndex((p) => p.id === id);
+        if (index === -1) return false;
+        store.projects.splice(index, 1);
+        return true;
       },
     };
     backendInstance = backend;

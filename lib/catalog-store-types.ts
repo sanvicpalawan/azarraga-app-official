@@ -1,4 +1,19 @@
-import type { Attribute, Catalog, Category, Product, Settings } from "./catalog-types";
+import type {
+  Attribute,
+  Catalog,
+  Category,
+  FinishedProject,
+  FinishedProjectInput,
+  FinishedProjectItem,
+  Product,
+  Settings,
+} from "./catalog-types";
+
+export type {
+  FinishedProject,
+  FinishedProjectInput,
+  FinishedProjectItem,
+};
 
 export type AttributeType = Attribute["type"];
 
@@ -140,4 +155,8 @@ export type CatalogBackend = {
   saveQuotation(input: QuotationInput): Promise<Quotation>;
   listQuotations(): Promise<Quotation[]>;
   getOverview(): Promise<Overview>;
+  listProjects(): Promise<FinishedProject[]>;
+  getProject(id: number): Promise<FinishedProject | undefined>;
+  saveProject(input: FinishedProjectInput): Promise<FinishedProject>;
+  deleteProject(id: number): Promise<boolean>;
 };

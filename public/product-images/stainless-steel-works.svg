@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 260" width="100%" height="100%">
+  <defs>
+    <linearGradient id="glass-blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f0f7ff"/>
+      <stop offset="100%" stop-color="#bfe0f8"/>
+    </linearGradient>
+    <linearGradient id="glass-door" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f6f8fa"/>
+      <stop offset="100%" stop-color="#dbe3ea"/>
+    </linearGradient>
+    <linearGradient id="frame-dark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#36393e"/>
+      <stop offset="100%" stop-color="#23272a"/>
+    </linearGradient>
+    <pattern id="mesh" width="8" height="8" patternUnits="userSpaceOnUse">
+      <path d="M 0 0 L 8 8 M 8 0 L 0 8" fill="none" stroke="#60a5fa" stroke-width="0.5" stroke-opacity="0.35"/>
+    </pattern>
+    <pattern id="mesh-dark" width="6" height="6" patternUnits="userSpaceOnUse">
+      <path d="M 0 3 L 6 3 M 3 0 L 3 6" fill="none" stroke="#3b82f6" stroke-width="0.5" stroke-opacity="0.4"/>
+    </pattern>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <rect x="2" y="2" width="356" height="256" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  
+    <g filter="url(#shadow)">
+      <rect x="40" y="30" width="280" height="200" fill="none" stroke="#94a3b8" stroke-width="12" rx="4"/>
+      <line x1="40" y1="130" x2="320" y2="130" stroke="#94a3b8" stroke-width="10"/>
+      <line x1="180" y1="30" x2="180" y2="230" stroke="#94a3b8" stroke-width="10"/>
+      <rect x="65" y="55" width="90" height="50" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+      <rect x="205" y="55" width="90" height="50" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+      <rect x="65" y="155" width="90" height="50" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+      <rect x="205" y="155" width="90" height="50" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+    </g>
+  
+</svg>

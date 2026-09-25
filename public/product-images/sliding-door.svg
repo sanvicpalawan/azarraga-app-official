@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 320" width="100%" height="100%">
+  <defs>
+    <linearGradient id="glass-blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f0f7ff"/>
+      <stop offset="100%" stop-color="#bfe0f8"/>
+    </linearGradient>
+    <linearGradient id="glass-door" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f6f8fa"/>
+      <stop offset="100%" stop-color="#dbe3ea"/>
+    </linearGradient>
+    <linearGradient id="frame-dark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#36393e"/>
+      <stop offset="100%" stop-color="#23272a"/>
+    </linearGradient>
+    <pattern id="mesh" width="8" height="8" patternUnits="userSpaceOnUse">
+      <path d="M 0 0 L 8 8 M 8 0 L 0 8" fill="none" stroke="#60a5fa" stroke-width="0.5" stroke-opacity="0.35"/>
+    </pattern>
+    <pattern id="mesh-dark" width="6" height="6" patternUnits="userSpaceOnUse">
+      <path d="M 0 3 L 6 3 M 3 0 L 3 6" fill="none" stroke="#3b82f6" stroke-width="0.5" stroke-opacity="0.4"/>
+    </pattern>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <rect x="2" y="2" width="396" height="316" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  
+    <g filter="url(#shadow)">
+      <rect x="20" y="15" width="360" height="290" fill="#2d3748" rx="2"/>
+      <!-- Left Door Leaf -->
+      <rect x="30" y="25" width="175" height="270" fill="#1a202c" rx="1"/>
+      <rect x="42" y="37" width="151" height="246" fill="url(#glass-door)"/>
+      <rect x="180" y="140" width="8" height="60" rx="3" fill="#cbd5e1"/>
+      <path d="M 140 170 L 90 170 M 110 155 L 90 170 L 110 185" fill="none" stroke="#475569" stroke-width="3" stroke-linecap="round"/>
+      <!-- Right Door Leaf -->
+      <rect x="195" y="25" width="175" height="270" fill="#334155" rx="1"/>
+      <rect x="207" y="37" width="151" height="246" fill="url(#glass-door)"/>
+      <rect x="212" y="140" width="8" height="60" rx="3" fill="#cbd5e1"/>
+      <path d="M 255 170 L 305 170 M 285 155 L 305 170 L 285 185" fill="none" stroke="#475569" stroke-width="3" stroke-linecap="round"/>
+      <!-- Bottom Track -->
+      <line x1="20" y1="300" x2="380" y2="300" stroke="#64748b" stroke-width="6"/>
+    </g>
+  
+</svg>
