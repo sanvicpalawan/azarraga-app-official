@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { defaultProjectsSeed } from "@/lib/projects-seed";
 import type { FinishedProjectItem } from "@/lib/catalog-types";
+import { detectCodes, scheduleItems } from "@/lib/invoice-schedule";
 
 export const dynamic = "force-dynamic";
 
@@ -64,82 +65,10 @@ export async function POST(request: Request) {
     const projectName = sanitize(cleanName.replace(/invoice|quote|quotation|scan/gi, "") || "Finished Project");
     const today = new Intl.DateTimeFormat("en-PH", { dateStyle: "long" }).format(new Date());
 
-    // Detect products from filename or extracted text
-    const detectedItems: FinishedProjectItem[] = [];
-
-    const isDoor = /door|bifold|bi-fold|ed door|swing|casement door/i.test(fileName + " " + extractedText);
-    const isLouver = /louver|jalousie/i.test(fileName + " " + extractedText);
-    const isAwning = /awning/i.test(fileName + " " + extractedText);
-
-    if (isLouver) {
-      detectedItems.push({
-        id: `ext-${Date.now()}-1`,
-        name: "4-inch Louver Jalousie Window",
-        category: "Windows",
-        widthFt: 4,
-        heightFt: 5,
-        quantity: 2,
-        rate: 950,
-        total: 38000,
-        series: "4-inch",
-        glass: "6mm Annealed",
-        color: "Dark Bronze",
-        lock: "Standard Crescent",
-        description: "Louver window extracted from project invoice.",
-        imageDataUrl: "/product-images/jalousie-window.svg",
-      });
-    } else if (isDoor) {
-      detectedItems.push({
-        id: `ext-${Date.now()}-1`,
-        name: "Double Leaf ED Commercial Door",
-        category: "Doors",
-        widthFt: 5.4,
-        heightFt: 7,
-        quantity: 1,
-        rate: 18500,
-        total: 18500,
-        series: "Frameless",
-        glass: "10mm Annealed",
-        color: "Analok",
-        lock: "Heavy Duty",
-        description: "Commercial entrance door extracted from project invoice.",
-        imageDataUrl: "/product-images/double-leaf-ed-door.svg",
-      });
-    } else if (isAwning) {
-      detectedItems.push({
-        id: `ext-${Date.now()}-1`,
-        name: "38 Series Awning Window",
-        category: "Windows",
-        widthFt: 4,
-        heightFt: 3,
-        quantity: 2,
-        rate: 1100,
-        total: 26400,
-        series: "Series 38",
-        glass: "6mm Annealed",
-        color: "Dark Bronze",
-        lock: "Standard Crescent",
-        description: "Awning window extracted from project invoice.",
-        imageDataUrl: "/product-images/awning-window.svg",
-      });
-    } else {
-      detectedItems.push({
-        id: `ext-${Date.now()}-1`,
-        name: `${projectName} 4-Panel Sliding Window`,
-        category: "Windows",
-        widthFt: 8,
-        heightFt: 5,
-        quantity: 1,
-        rate: 1850,
-        total: 74000,
-        series: "Series 798",
-        glass: "6mm Annealed",
-        color: "Dark Bronze",
-        lock: "Standard Crescent",
-        description: "Window fabrication extracted from project invoice.",
-        imageDataUrl: "/four-panel-window.png",
-      });
-    }
+    // Extract the window & door schedule (W1–W8, D1, D9) with elevation drawings.
+    // If no codes are readable (e.g. scanned image PDF), fall back to the full schedule.
+    const codes = detectCodes(extractedText + " " + fileName);
+    const detectedItems: FinishedProjectItem[] = scheduleItems(codes.length ? codes : undefined);
 
     const totalCalculated = detectedItems.reduce((acc, curr) => acc + (curr.total || 0), 0);
 
