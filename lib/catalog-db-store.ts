@@ -1,4 +1,4 @@
-import type { Attribute, Catalog, Category, Product, Settings } from "./catalog-types";
+import type { Attribute, Catalog, Category, FinishedProject, FinishedProjectInput, FinishedProjectItem, Product, Settings } from "./catalog-types";
 import type {
   AttributeType,
   CatalogBackend,
@@ -189,6 +189,28 @@ function mapQuotation(row: Row): Quotation {
     item,
     id: num(row.id),
     status: "draft",
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  };
+}
+
+function mapProject(row: Row): FinishedProject {
+  const items = (Array.isArray(row.items) ? row.items : []) as FinishedProjectItem[];
+  return {
+    id: num(row.id),
+    projectName: str(row.project_name),
+    clientName: str(row.client_name),
+    projectAddress: str(row.project_address),
+    invoiceNumber: str(row.invoice_number),
+    invoiceDate: str(row.invoice_date),
+    totalAmount: num(row.total_amount),
+    fileName: str(row.file_name),
+    fileType: str(row.file_type),
+    fileSize: num(row.file_size),
+    fileData: str(row.file_data),
+    items,
+    notes: str(row.notes),
+    status: (str(row.status) as FinishedProject["status"]) || "completed",
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };
@@ -587,7 +609,7 @@ function createDbBackend(): CatalogBackend {
                (select count(*) from categories)::int as total_categories,
                (select count(*) from media)::int as total_media`;
       const values = row as Row;
-      return {
+        return {
         totalQuotes: num(values.total_quotes),
         totalRevenue: num(values.total_revenue),
         totalSqft: num(values.total_sqft),
@@ -595,6 +617,65 @@ function createDbBackend(): CatalogBackend {
         totalCategories: num(values.total_categories),
         totalMedia: num(values.total_media),
       };
+    },
+
+    async listProjects(): Promise<FinishedProject[]> {
+      await readySchema();
+      const rows = await getDb()`
+        select * from finished_projects
+        order by updated_at desc, id desc`;
+      return rows.map((row: Row) => mapProject(row));
+    },
+
+    async getProject(id: number): Promise<FinishedProject | undefined> {
+      await readySchema();
+      const [row] = await getDb()`select * from finished_projects where id = ${id}`;
+      return row ? mapProject(row as Row) : undefined;
+    },
+
+    async saveProject(input: FinishedProjectInput): Promise<FinishedProject> {
+      await readySchema();
+      const db = getDb();
+      if (input.id) {
+        const [row] = await db`
+          update finished_projects set
+            project_name = ${input.projectName},
+            client_name = ${input.clientName},
+            project_address = ${input.projectAddress},
+            invoice_number = ${input.invoiceNumber},
+            invoice_date = ${input.invoiceDate},
+            total_amount = ${input.totalAmount},
+            file_name = ${input.fileName},
+            file_type = ${input.fileType},
+            file_size = ${input.fileSize},
+            file_data = ${input.fileData ?? ""},
+            items = ${JSON.stringify(input.items)}::jsonb,
+            notes = ${input.notes ?? ""},
+            status = ${input.status},
+            updated_at = now()
+          where id = ${input.id}
+          returning *`;
+        return mapProject(row as Row);
+      }
+      const [row] = await db`
+        insert into finished_projects (
+          project_name, client_name, project_address, invoice_number, invoice_date,
+          total_amount, file_name, file_type, file_size, file_data, items, notes, status
+        ) values (
+          ${input.projectName}, ${input.clientName}, ${input.projectAddress},
+          ${input.invoiceNumber}, ${input.invoiceDate}, ${input.totalAmount},
+          ${input.fileName}, ${input.fileType}, ${input.fileSize},
+          ${input.fileData ?? ""}, ${JSON.stringify(input.items)}::jsonb,
+          ${input.notes ?? ""}, ${input.status}
+        )
+        returning *`;
+      return mapProject(row as Row);
+    },
+
+    async deleteProject(id: number): Promise<boolean> {
+      await readySchema();
+      const rows = await getDb()`delete from finished_projects where id = ${id} returning id`;
+      return rows.length > 0;
     },
   };
 }

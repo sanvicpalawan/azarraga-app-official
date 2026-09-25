@@ -1,4 +1,4 @@
-import type { Attribute, Catalog, Category, Product, Settings } from "./catalog-types";
+import type { Attribute, Catalog, Category, FinishedProject, FinishedProjectInput, Product, Settings } from "./catalog-types";
 import type {
   AttributeType,
   CatalogBackend,
@@ -17,6 +17,9 @@ import { getMemoryBackend } from "./catalog-memory-store";
 
 export type {
   AttributeType,
+  FinishedProject,
+  FinishedProjectInput,
+  FinishedProjectItem,
   MediaAsset,
   MediaInput,
   MediaUsage,
@@ -159,6 +162,22 @@ export async function listQuotations(): Promise<Quotation[]> {
 
 export async function getOverview(): Promise<Overview> {
   return getStore().getOverview();
+}
+
+export async function listProjects(): Promise<FinishedProject[]> {
+  return getStore().listProjects();
+}
+
+export async function getProject(id: number): Promise<FinishedProject | undefined> {
+  return getStore().getProject(id);
+}
+
+export async function saveProject(input: FinishedProjectInput): Promise<FinishedProject> {
+  return getStore().saveProject(input);
+}
+
+export async function deleteProject(id: number): Promise<boolean> {
+  return getStore().deleteProject(id);
 }
 
 export function parseId(value: string): number {

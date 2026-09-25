@@ -35,4 +35,51 @@ export type Settings = {
   pdfHeader: string;
   updatedAt: string;
 };
-export type Catalog = { settings: Settings; categories: Category[]; products: Product[]; attributes: Attribute[] };
+
+export type FinishedProjectItem = {
+  id: string;
+  name: string;
+  category: "Windows" | "Doors" | "Others";
+  widthFt?: number;
+  heightFt?: number;
+  quantity?: number;
+  rate?: number;
+  total?: number;
+  series?: string;
+  glass?: string;
+  color?: string;
+  lock?: string;
+  description?: string;
+  imageDataUrl?: string;
+  productId?: number | null;
+};
+
+export type FinishedProject = {
+  id: number;
+  projectName: string;
+  clientName: string;
+  projectAddress: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  totalAmount: number;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  fileData?: string;
+  items: FinishedProjectItem[];
+  notes?: string;
+  status: "completed" | "archived" | "in_progress";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type FinishedProjectInput = Omit<FinishedProject, "id" | "createdAt" | "updatedAt"> & {
+  id?: number;
+};
+
+export type Catalog = {
+  settings: Settings;
+  categories: Category[];
+  products: Product[];
+  attributes: Attribute[];
+};
