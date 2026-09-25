@@ -7,9 +7,9 @@ Official web application and estimation system for **Azarraga Glass & Aluminum S
 - **Next.js 16 App Router** with the standard Node.js runtime
 - **React 19** and **TypeScript** in strict mode
 - **Tailwind CSS v4**, shadcn/ui components, and Lucide icons
-- **Neon Postgres** as the catalog database (products, categories, attributes, company settings, and quotations) via the `@neondatabase/serverless` driver — the schema is created and the default catalog is seeded automatically on first use
+- **Neon Postgres** as the catalog database (products, categories, attributes, company settings, and quotations) via the `@neondatabase/serverless` driver — a new database starts with an empty product catalog
 - **Images stored inside Neon Postgres itself** — product photos and the company logo are kept in the database, so there is no second storage provider and no extra environment variables to configure
-- Without `DATABASE_URL` the app falls back to a built-in in-memory catalog store, so local development works with zero backend setup
+- Production requires `DATABASE_URL`; without it the app returns a storage error instead of silently using temporary data. Local development can still use an empty in-memory catalog.
 
 The project is intentionally framework-native: there is no alternate Vite build, edge adapter, or provider-specific runtime required to run it.
 
@@ -37,19 +37,26 @@ azarraga-app-official/
 ├── lib/
 │   ├── catalog-store.ts      # Catalog API (picks the active backend)
 │   ├── catalog-store-types.ts# Shared store types and backend contract
-│   ├── catalog-seed.ts       # Default catalog used for both backends
+│   ├── catalog-seed.ts       # Empty catalog with company settings and categories
 │   ├── catalog-db-store.ts   # Neon Postgres backend (catalog, images, quotations)
 │   ├── catalog-memory-store.ts # In-memory backend (local dev without a DB)
 │   ├── db.ts                 # Neon connection, schema, and seeding
 │   ├── catalog-types.ts
 │   └── utils.ts
 ├── scripts/
-│   └── verify-neon.ts        # Live Neon + object storage verification
+│   ├── verify-neon.ts        # Live Neon database and image storage verification
+│   └── archive-legacy-products.ts # Dry run, then archive unchanged sample products
+├── fixtures/
+│   └── legacy-catalog.ts    # Original sample catalog kept for reference, never seeded
 ├── public/
 ├── next.config.ts
 ├── package.json
 └── tsconfig.json
 ```
+
+The original sample products and made-up prices are in `fixtures/legacy-catalog.ts` for reference only. Existing database records remain untouched by code deployment. To find and remove only unchanged legacy sample products from an existing Neon database, run `pnpm archive:demo` to inspect the count, then run `pnpm archive:demo --apply`. It first copies each matching row to `archived_sample_products`; imported invoices, customer quotes, and customized products remain intact. Use the database connection for the intended environment.
+
+`GET /api/health/storage` confirms whether the deployed application can actually read its configured Postgres database. It responds with `503` if the connection is missing or fails. Run `pnpm verify:neon` with `DATABASE_URL` set to perform a temporary write/read/cleanup check of products, two-line quotations, and image storage.
 
 ## Getting started
 

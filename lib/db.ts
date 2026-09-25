@@ -146,7 +146,8 @@ export type SchemaStatus = { seeded: boolean };
 let schemaReady: Promise<SchemaStatus> | null = null;
 
 /**
- * Makes sure the catalog schema exists, creating and seeding it on first use.
+ * Makes sure the catalog schema exists, creating basic company settings and
+ * empty product categories on first use. No example products or rates are added.
  * The result is memoized per process (at most a couple of round-trips per
  * cold start); failures are not cached so the next request retries.
  */
@@ -175,8 +176,7 @@ export async function ensureCatalogSchema(): Promise<SchemaStatus> {
 }
 
 /**
- * Seeds the default catalog inside a single non-interactive transaction so a
- * concurrent first request can never observe a half-seeded database.
+ * Initializes basic company settings and categories in one transaction.
  */
 async function seedDefaults(db: Db): Promise<void> {
   const data = buildDefaultCatalogData(new Date().toISOString());

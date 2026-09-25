@@ -36,13 +36,14 @@ let backend: CatalogBackend | null = null;
 
 /**
  * Returns the active catalog backend. When DATABASE_URL is set, the catalog,
- * quotations, and uploaded files live in Neon Postgres plus S3-compatible
- * object storage (the production configuration). Without it, the app runs on
- * the built-in in-memory store, which keeps local development working with no
- * backend at all.
+ * quotations, and uploaded files live in Neon Postgres. Local development
+ * may use temporary in-memory storage, but production must have a database.
  */
 function getStore(): CatalogBackend {
   if (!backend) {
+    if (!process.env.DATABASE_URL && process.env.NODE_ENV === "production") {
+      throw new Error("DATABASE_URL is required in production; refusing temporary in-memory storage.");
+    }
     backend = process.env.DATABASE_URL ? getDbBackend() : getMemoryBackend();
   }
   return backend;

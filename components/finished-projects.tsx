@@ -46,7 +46,7 @@ type Props = {
 export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: Props) {
   const [projects, setProjects] = useState<FinishedProject[]>([]);
   const [savedQuotes, setSavedQuotes] = useState<Quotation[]>([]);
-  const [historyTab, setHistoryTab] = useState<"saved" | "imported">("saved");
+  const [historyTab, setHistoryTab] = useState<"saved" | "imported">("imported");
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [scanning, setScanning] = useState(false);

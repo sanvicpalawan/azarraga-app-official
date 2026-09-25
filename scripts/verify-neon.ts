@@ -82,39 +82,21 @@ async function main(): Promise<void> {
     version.split(" ")[1] ?? "connected",
   );
 
-  console.log("\n2. Schema + catalog seed");
+  console.log("\n2. Schema + clean catalog");
   const { seeded } = await readySchema();
   report(
     "Schema initialized",
     true,
-    seeded ? "created and seeded the default catalog" : "already present",
+    seeded ? "created company settings and empty product catalog" : "already present",
   );
   const snapshot = await getCatalogSnapshot();
   report(
-    "Seed: categories",
+    "Categories available",
     snapshot.categories.length >= 3,
     `${snapshot.categories.length} found (expected 3)`,
   );
-  report(
-    "Seed: attributes",
-    snapshot.attributes.length >= 21,
-    `${snapshot.attributes.length} found (expected 21)`,
-  );
-  report(
-    "Seed: products",
-    snapshot.products.length >= 28,
-    `${snapshot.products.length} found (expected 28)`,
-  );
-  const fourPanel = snapshot.products.find(
-    (product) => product.name === "4 Panel Sliding Window",
-  );
-  report(
-    "Seed: four-panel sliding window price",
-    fourPanel?.basePrice === 1850,
-    fourPanel
-      ? `P${fourPanel.basePrice.toFixed(2)} (expected P1850.00)`
-      : "product not found",
-  );
+  report("Company settings available", !!snapshot.settings.companyName, snapshot.settings.companyName);
+  report("Catalog readable", Array.isArray(snapshot.products), `${snapshot.products.length} existing products`);
 
   console.log("\n3. Product write/read-back round-trip");
   const stamp = Date.now();
@@ -143,6 +125,35 @@ async function main(): Promise<void> {
 
   console.log("\n4. Quotation write/read-back round-trip");
   const quotationNumber = `VERIFY-${stamp}`;
+  const firstItem = {
+    productName: created.name,
+    width: 1.2,
+    height: 1.2,
+    quantity: 2,
+    sqft: 10,
+    rate: 45,
+    pricingMethod: "sqft" as const,
+    sectionCompany: "Azarraga Glass & Aluminum",
+    sectionType: "Windows",
+    glass: "6mm Annealed",
+    color: "White",
+    lock: "Standard Crescent",
+    location: "",
+    description: "Temporary quotation created by pnpm verify:neon.",
+    total: 450,
+  };
+  const secondItem = {
+    ...firstItem,
+    productName: "Verification door",
+    imageUrl: "/test-door.png",
+    width: 2,
+    height: 3,
+    quantity: 1,
+    sqft: 6,
+    rate: 550,
+    pricingMethod: "unit" as const,
+    total: 550,
+  };
   const saved = await saveQuotation({
     quotationNumber,
     customerName: "Verify Customer",
@@ -151,24 +162,9 @@ async function main(): Promise<void> {
     subtotal: 1000,
     discount: 100,
     grandTotal: 900,
-    totalSqft: 20,
-    item: {
-      productName: "4 Panel Sliding Window",
-      width: 1.2,
-      height: 1.2,
-      quantity: 2,
-      sqft: 10,
-      rate: 450,
-      pricingMethod: "sqft",
-      sectionCompany: "Azarraga Glass & Aluminum",
-      sectionType: "Windows",
-      glass: "6mm Annealed",
-      color: "White",
-      lock: "Standard Crescent",
-      location: "",
-      description: "Temporary quotation created by pnpm verify:neon.",
-      total: 900,
-    },
+    totalSqft: 16,
+    item: firstItem,
+    items: [firstItem, secondItem],
   });
   const quotations = await listQuotations();
   const readBack = quotations.find(
@@ -178,7 +174,10 @@ async function main(): Promise<void> {
     "Quotation insert/read-back",
     readBack?.id === saved.id &&
       readBack.grandTotal === 900 &&
-      readBack.item.productName === "4 Panel Sliding Window",
+      readBack.customerName === "Verify Customer" &&
+      readBack.items?.length === 2 &&
+      readBack.items[1].rate === 550 &&
+      readBack.items[1].imageUrl === "/test-door.png",
     `id ${saved.id}, number ${quotationNumber}`,
   );
   await db.query("delete from quotations where quotation_number = $1", [

@@ -539,7 +539,11 @@ export default function Home() {
               <div className="empty-state">
                 <Search />
                 <h2>No matching products</h2>
-                <p>Try another search or add the product in Admin Settings.</p>
+                <p>Import a past invoice to build your real catalog, or add a product in Product Library.</p>
+                <div className="quote-control-actions">
+                  <Button onClick={() => setScreen("projects")}>Import an invoice</Button>
+                  <Button variant="outline" onClick={() => setScreen("library")}>Add a product</Button>
+                </div>
               </div>
             )}
           </section>

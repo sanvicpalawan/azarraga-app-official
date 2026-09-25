@@ -1,5 +1,7 @@
 # Handoff — Neon Postgres integration (data + images)
 
+> Historical handoff: counts and default product prices below describe the original demo catalog. Current startup creates no sample products. See README.md for the current database verification and archival procedure.
+
 **Repo:** `sanvicpalawan/azarraga-app-official` · **Branch:** `arena/01a0c3d2-azarraga-app-official`
 **Status:** Code complete and verified live against production (see §2b). Neon Postgres
 handles everything — catalog, quotations, and the images themselves — so the only environment
