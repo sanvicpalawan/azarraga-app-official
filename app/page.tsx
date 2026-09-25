@@ -179,7 +179,7 @@ export default function Home() {
   const visibleProductFamilies = useMemo(() => {
     const groups = new Map<string, Product[]>();
     for (const item of visibleProducts) {
-      const family = item.description.includes("Historical quote")
+      const family = item.description.includes("Historical price")
         ? item.name.replace(/\s*—\s*\d+(?:\.\d+)?\s*×\s*\d+(?:\.\d+)?\s*m$/, "")
         : `product-${item.id}`;
       groups.set(family, [...(groups.get(family) || []), item]);
@@ -191,7 +191,7 @@ export default function Home() {
     setChooserNotice("");
     setProduct(item);
     setRate(String(item.basePrice || 0));
-    if (item.description.includes("Historical quote")) {
+    if (item.description.includes("Historical price")) {
       setPricingMethod("unit");
       const dimensions = item.name.match(/—\s*(\d+(?:\.\d+)?)\s*×\s*(\d+(?:\.\d+)?)\s*m$/);
       if (dimensions) {
@@ -575,7 +575,7 @@ export default function Home() {
                   <div>
                     <strong>
                       {item.basePrice > 0
-                        ? item.description.includes("Historical quote") ? `${money.format(item.basePrice)} historical unit price` : `${money.format(item.basePrice)} base rate`
+                        ? item.description.includes("Historical price") ? `${money.format(item.basePrice)} historical unit price` : `${money.format(item.basePrice)} base rate`
                         : "Set price in quote"}
                     </strong>
                     <span>

@@ -154,7 +154,8 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
     const subtotal = project.items.reduce((sum,item) => sum + (item.total || 0),0);
     const delivery = Number(project.notes?.match(/Delivery: ₱([\d.]+)/)?.[1] || 0);
     const existingProject = projects.find(saved => saved.invoiceNumber === project.invoiceNumber && saved.fileName === project.fileName);
-    const revised = { ...project, id: existingProject?.id, totalAmount: subtotal + delivery };
+    const revised = { ...project, id: existingProject?.id,
+      totalAmount: project.notes?.includes("No grand total printed") ? 0 : subtotal + delivery };
     if (!project.items.length || project.items.some(item => !item.name || !item.quantity || !item.rate)) {
       setImportError("Each line needs a name, quantity, and historical unit price before saving.");
       return;
@@ -214,8 +215,8 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
       const productPayload = {
         name: `${item.name}${item.widthM && item.heightM ? ` — ${item.widthM} × ${item.heightM} m` : ""}`,
         categoryId: category ? category.id : 1,
-        basePrice: item.rate || 0,
-        description: `${item.description || item.name} · Historical quote ${project.invoiceNumber}, ${project.invoiceDate}. Price requires confirmation before a new quote.`,
+        basePrice: 0,
+        description: `${item.description || item.name} · Historical price ${money.format(item.rate || 0)}/set for ${project.clientName}, ${project.invoiceNumber}, ${project.invoiceDate}. Check current pricing before quoting.`,
         defaultSeriesId: null,
         defaultGlassId: null,
       };
@@ -297,7 +298,7 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
 
   const filteredProjects = projects.filter((p) => {
     const matchesSearch =
-      `${p.projectName} ${p.clientName} ${p.invoiceNumber} ${p.fileName}`
+      `${p.projectName} ${p.clientName} ${p.invoiceNumber} ${p.fileName} ${p.items.map(item=>item.name).join(" ")}`
         .toLowerCase()
         .includes(search.toLowerCase());
     if (selectedCategory === "All") return matchesSearch;
@@ -306,6 +307,7 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
       p.items.some((i) => i.category.toLowerCase() === selectedCategory.toLowerCase())
     );
   });
+  const visibleProjects = pendingProjects.length ? [pendingProjects[0], ...filteredProjects] : filteredProjects;
 
   const totalRevenue = projects.reduce((sum, p) => sum + (p.totalAmount || 0), 0);
   const totalItems = projects.reduce((sum, p) => sum + p.items.length, 0);
@@ -428,14 +430,14 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
           </div>
 
           <div className="projects-scroll-list">
-            {filteredProjects.length === 0 && (
+            {visibleProjects.length === 0 && (
               <div className="empty-projects-state">
                 <FileText className="w-8 h-8 text-slate-300" />
                 <p>No invoices found matching &ldquo;{search}&rdquo;</p>
               </div>
             )}
 
-            {filteredProjects.map((p) => {
+            {visibleProjects.map((p) => {
               const isSelected = activeProject?.id === p.id;
               return (
                 <article
@@ -468,7 +470,7 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
                   </div>
 
                   <div className="card-footer-row">
-                    <strong>{money.format(p.totalAmount)}</strong>
+                    <strong>{p.notes?.includes("No grand total printed") ? "No total printed" : money.format(p.totalAmount)}</strong>
                     <span className="status-pill">{p.status}</span>
                   </div>
                 </article>
@@ -587,10 +589,19 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
                           {item.color && ` · ${item.color}`}
                         </p>
                         <p className="item-desc">{item.description}</p>
+                        {projects.flatMap(p=>p.items
+                          .filter(saved=>saved.name===item.name && saved.widthM===item.widthM && saved.heightM===item.heightM)
+                          .map(saved=>({account:p.clientName,quote:p.invoiceNumber,date:p.invoiceDate,rate:saved.rate})))
+                          .filter(ref=>ref.quote!==activeProject.invoiceNumber)
+                          .slice(0,5).map((ref,refIndex)=>(
+                            <p key={`${ref.quote}-${refIndex}`} className="item-desc">
+                              Previous account: {ref.account} · {ref.quote} · {ref.date} · {money.format(ref.rate || 0)} per set
+                            </p>
+                          ))}
 
                         <div className="item-price-row">
                           <div>
-                            <small>Qty & Rate</small>
+                            <small>Historical price · {item.sourceAccountName || activeProject.clientName}</small>
                             <strong>
                               {item.quantity} × {money.format(item.rate || 0)}
                             </strong>

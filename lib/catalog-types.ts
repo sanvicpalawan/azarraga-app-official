@@ -42,6 +42,9 @@ export type FinishedProjectItem = {
   category: "Windows" | "Doors" | "Others";
   itemCode?: string;
   quoteOption?: number;
+  sourceAccountName?: string;
+  sourceQuotationNumber?: string;
+  sourceQuoteDate?: string;
   widthM?: number;
   heightM?: number;
   widthFt?: number;

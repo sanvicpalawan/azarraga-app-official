@@ -12,12 +12,26 @@ const line = (tokens: Token[], y: number, x1: number, x2: number) =>
 
 async function capture(canvas: Canvas, y: number, before: number, after: number) {
   const scale = 3;
-  const top = Math.round(Math.max(before+3,y-31)*scale);
-  const bottom = Math.round(Math.min(after-3,y+31)*scale);
+  const x=304*scale, width=105*scale, center=Math.round(y*scale);
+  const scanTop=Math.max(0,center-45*scale), scanBottom=Math.min(canvas.height,center+45*scale);
+  const source=canvas.getContext("2d").getImageData(x,scanTop,width,scanBottom-scanTop).data;
+  const rules: number[]=[];
+  for (let row=0;row<scanBottom-scanTop;row++) {
+    let dark=0;
+    for (let col=0;col<width;col++) {
+      const i=(row*width+col)*4;
+      if (source[i]<140 && source[i+1]<140 && source[i+2]<140) dark++;
+    }
+    if (dark>width*.78) rules.push(scanTop+row);
+  }
+  const upper=rules.filter(position=>position<center-8*scale).at(-1);
+  const lower=rules.find(position=>position>center+8*scale);
+  const top=upper!==undefined?upper+3:Math.round(Math.max(before+3,y-31)*scale);
+  const bottom=lower!==undefined?lower-3:Math.round(Math.min(after-3,y+31)*scale);
   if (bottom <= top) return;
   // PDF elevation column, excluding both vertical table rules.
-  const crop = createCanvas(105*scale, bottom-top);
-  crop.getContext("2d").drawImage(canvas, 304*scale, top, crop.width, crop.height, 0, 0, crop.width, crop.height);
+  const crop = createCanvas(width, bottom-top);
+  crop.getContext("2d").drawImage(canvas, x, top, crop.width, crop.height, 0, 0, crop.width, crop.height);
   const context = crop.getContext("2d");
   const image = context.getImageData(0,0,crop.width,crop.height);
   const pixels = image.data;
@@ -60,27 +74,32 @@ export async function extractInvoice(bytes: Uint8Array, file: Pick<FinishedProje
         invoiceNumber=line(tokens,109,405,800).match(/Q\d{4}-\d+/i)?.[0] || "";
       }
       const headers=tokens.filter(t=>t.text==="ITEM #" && t.x<70).sort((a,b)=>a.y-b.y);
-      const rows=tokens.filter(t=>t.x>17 && t.x<51 && /^[A-Z]{1,3}\d{0,2}$/.test(t.text))
+      // Price/quantity cells identify every row, including rows with no item code.
+      const rows=tokens.filter(t=>t.x>=416 && t.x<446 && /^\d+$/.test(t.text)
+        && /^set[s]?$/i.test(line(tokens,t.y,446,490))
+        && !!line(tokens,t.y,490,612) && !!line(tokens,t.y,612,790))
         .sort((a,b)=>a.y-b.y);
       const scale=3, viewport=page.getViewport({scale});
       const canvas=createCanvas(Math.ceil(viewport.width),Math.ceil(viewport.height));
       await page.render({canvasContext:canvas.getContext("2d") as never,viewport,canvas:canvas as never}).promise;
       for (const [index,row] of rows.entries()) {
         const section=sectionCount+headers.filter(h=>h.y<row.y).length || 1;
+        const itemCode=tokens.find(t=>Math.abs(t.y-row.y)<5 && t.x>17 && t.x<51 && /^[A-Z]{1,3}\d{0,2}$/.test(t.text))?.text;
         const description=tokens.filter(t=>Math.abs(t.y-row.y)<19 && t.x>=54 && t.x<300)
           .sort((a,b)=>a.y-b.y||a.x-b.x).map(t=>t.text).join(" ").replace(/\s+/g," ").trim();
-        const quantity=value(line(tokens,row.y,416,446));
+        const quantity=value(row.text);
         const rate=value(line(tokens,row.y,490,612));
         const total=value(line(tokens,row.y,612,790));
         if (!description || !quantity || !rate || !total || Math.abs(quantity*rate-total)>.01)
-          throw new Error(`Cannot verify item ${row.text} on page ${pageNo}.`);
+          throw new Error(`Cannot verify item ${index+1} on page ${pageNo}.`);
         const dimensions=description.match(/(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s*$/i);
         const widthM=dimensions?Number(dimensions[1]):undefined;
         const heightM=dimensions?Number(dimensions[2]):undefined;
         const before=index?(rows[index-1].y+row.y)/2:row.y-35;
         const after=index<rows.length-1?(rows[index+1].y+row.y)/2:row.y+35;
         items.push({
-          id:`${pageNo}-${section}-${row.text}-${index}`,itemCode:row.text,quoteOption:section,
+          id:`${pageNo}-${section}-row-${index}`,itemCode,quoteOption:section,
+          sourceAccountName:clientName,sourceQuotationNumber:invoiceNumber,sourceQuoteDate:invoiceDate,
           name:description.replace(/,?\s*\d+(?:\.\d+)?\s*x\s*\d+(?:\.\d+)?\s*$/i,""),
           description,category:/door/i.test(description)?"Doors":/window|jalou/i.test(description)?"Windows":"Others",
           widthM,heightM,widthFt:widthM?+(widthM*3.28084).toFixed(4):undefined,
@@ -105,8 +124,8 @@ export async function extractInvoice(bytes: Uint8Array, file: Pick<FinishedProje
     throw new Error(`Invoice items total ₱${itemSum}, but the PDF says ₱${expected}.`);
   return {
     projectName:`${clientName} — historical quotation`,clientName,projectAddress,invoiceNumber,invoiceDate,
-    totalAmount:itemSum+delivery,fileName:file.fileName,fileType:file.fileType,fileSize:file.fileSize,fileData:file.fileData,
-    items,notes:`${totals.length>1?`${totals.length} separate quote options. Do not combine into an order. `:""}${delivery?`Delivery: ₱${delivery.toFixed(2)}. `:""}Historical prices; confirm current pricing before reuse.`,
+    totalAmount:totals.length?itemSum+delivery:0,fileName:file.fileName,fileType:file.fileType,fileSize:file.fileSize,fileData:file.fileData,
+    items,notes:`${totals.length>1?`${totals.length} separate quote options. Do not combine into an order. `:""}${!totals.length?"No grand total printed in this PDF; individual prices are references, not a combined project amount. ":""}${delivery?`Delivery: ₱${delivery.toFixed(2)}. `:""}Historical prices; confirm current pricing before reuse.`,
     status:"historical",
   };
 }
