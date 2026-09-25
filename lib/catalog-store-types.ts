@@ -33,6 +33,8 @@ export type SettingsInput = Omit<Settings, "id" | "logoKey" | "updatedAt">;
 
 export type QuotationItem = {
   productName: string;
+  productId?: number | null;
+  imageUrl?: string | null;
   width: number;
   height: number;
   quantity: number;
@@ -59,6 +61,7 @@ export type QuotationInput = {
   grandTotal: number;
   totalSqft: number;
   item: QuotationItem;
+  items?: QuotationItem[];
 };
 
 export type Quotation = QuotationInput & {

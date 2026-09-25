@@ -172,11 +172,13 @@ function extensionForContentType(contentType: string): string {
 }
 
 function mapQuotation(row: Row): Quotation {
-  const item = (
+  const stored = (
     typeof row.item === "object" && row.item !== null
       ? row.item
       : {}
-  ) as Quotation["item"];
+  ) as Quotation["item"] | Quotation["item"][];
+  const items = Array.isArray(stored) ? stored : [stored];
+  const item = items[0];
   return {
     quotationNumber: str(row.quotation_number),
     customerName: str(row.customer_name),
@@ -187,6 +189,7 @@ function mapQuotation(row: Row): Quotation {
     grandTotal: num(row.grand_total),
     totalSqft: num(row.total_sqft),
     item,
+    items,
     id: num(row.id),
     status: "draft",
     createdAt: iso(row.created_at),
@@ -573,7 +576,7 @@ function createDbBackend(): CatalogBackend {
         ) values (
           ${input.quotationNumber}, ${input.customerName}, ${input.projectName},
           ${input.projectAddress}, ${input.subtotal}, ${input.discount},
-          ${input.grandTotal}, ${input.totalSqft}, ${JSON.stringify(input.item)},
+          ${input.grandTotal}, ${input.totalSqft}, ${JSON.stringify(input.items?.length ? input.items : [input.item])},
           'draft', now()
         )
         on conflict (quotation_number) do update set

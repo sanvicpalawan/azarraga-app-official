@@ -454,6 +454,7 @@ export function getMemoryBackend(): CatalogBackend {
         const quotation: Quotation = {
           ...input,
           item: { ...input.item },
+          items: (input.items?.length ? input.items : [input.item]).map(item=>({...item})),
           id: existing?.id ?? store.nextQuotationId++,
           status: "draft",
           createdAt: existing?.createdAt ?? now,
@@ -465,7 +466,7 @@ export function getMemoryBackend(): CatalogBackend {
         } else {
           store.quotations.push(quotation);
         }
-        return { ...quotation, item: { ...quotation.item } };
+        return { ...quotation, item: { ...quotation.item }, items: quotation.items?.map(item=>({...item})) };
       },
 
       async listQuotations(): Promise<Quotation[]> {
@@ -473,7 +474,7 @@ export function getMemoryBackend(): CatalogBackend {
           .quotations.slice()
           .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
           .slice(0, 25)
-          .map((quotation) => ({ ...quotation, item: { ...quotation.item } }));
+          .map((quotation) => ({ ...quotation, item: { ...quotation.item }, items: quotation.items?.map(item=>({...item})) }));
       },
 
       async getOverview(): Promise<Overview> {

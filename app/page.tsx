@@ -26,8 +26,10 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { Attribute, Catalog, Product } from "@/lib/catalog-types";
+import type { QuotationItem } from "@/lib/catalog-store-types";
 
 type Screen = "catalog" | "configure" | "preview" | "projects" | "library" | "admin";
+type QuoteLine = { id: string; product: Product; item: QuotationItem };
 const money = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 2 });
 
 function ProductPicture({ product, className = "" }: { product: Product; className?: string }) {
@@ -82,6 +84,9 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [search, setSearch] = useState("");
   const [product, setProduct] = useState<Product | null>(null);
+  const [quoteLines, setQuoteLines] = useState<QuoteLine[]>([]);
+  const [editingLineId, setEditingLineId] = useState<string | null>(null);
+  const [quotationNumber, setQuotationNumber] = useState("");
   const [width, setWidth] = useState("8"),
     [height, setHeight] = useState("5"),
     [quantity, setQuantity] = useState("1"),
@@ -142,7 +147,7 @@ export default function Home() {
     [catalog],
   );
 
-  const totals = useMemo(() => {
+  const itemTotals = useMemo(() => {
     const w = Number(width) || 0,
       h = Number(height) || 0,
       qty = Math.max(0, Number(quantity) || 0),
@@ -150,9 +155,14 @@ export default function Home() {
     const areaEach = w * h,
       totalArea = areaEach * qty,
       subtotal = pricingMethod === "sqft" ? totalArea * itemRate : qty * itemRate;
-    const discountValue = Math.min(Math.max(0, Number(discount) || 0), subtotal);
-    return { areaEach, totalArea, subtotal, discount: discountValue, grandTotal: subtotal - discountValue };
-  }, [width, height, quantity, rate, pricingMethod, discount]);
+    return { areaEach, totalArea, subtotal };
+  }, [width, height, quantity, rate, pricingMethod]);
+  const totals = useMemo(() => {
+    const subtotal=quoteLines.reduce((sum,line)=>sum+line.item.total,0);
+    const totalArea=quoteLines.reduce((sum,line)=>sum+line.item.sqft,0);
+    const discountValue=Math.min(Math.max(0,Number(discount)||0),subtotal);
+    return {subtotal,totalArea,discount:discountValue,grandTotal:subtotal-discountValue};
+  },[quoteLines,discount]);
 
   const visibleProducts = useMemo(
     () =>
@@ -178,7 +188,13 @@ export default function Home() {
   }, [visibleProducts]);
 
   const chooseProduct = (item: Product) => {
+    setEditingLineId(null);
     setProduct(item);
+    setWidth("8");
+    setHeight("5");
+    setQuantity("1");
+    setPricingMethod("sqft");
+    setLocation("");
     setRate(String(item.basePrice || 0));
     if (item.description.includes("Historical price")) {
       setPricingMethod("unit");
@@ -201,15 +217,60 @@ export default function Home() {
     product && Number(width) > 0 && Number(height) > 0 && Number(quantity) > 0 && Number(rate) >= 0,
   );
 
-  const saveDraft = async () => {
+  const addCurrentLine = (destination: "catalog" | "preview") => {
     if (!product || !canPreview) return;
+    const item: QuotationItem = {
+      productName:product.name, productId:product.id===99999?null:product.id,
+      imageUrl:product.imageUrl,width:Number(width),height:Number(height),
+      quantity:Math.max(1,Math.round(Number(quantity))),sqft:itemTotals.totalArea,
+      rate:Number(rate),pricingMethod,sectionCompany:"Analok",sectionType:series||"N/A",
+      glass:glass||"N/A",color:color||"N/A",lock:lock||"N/A",
+      location,description,total:itemTotals.subtotal,
+    };
+    const id=editingLineId||crypto.randomUUID();
+    setQuoteLines(lines=>editingLineId
+      ? lines.map(line=>line.id===id?{id,product,item}:line)
+      : [...lines,{id,product,item}]);
+    setEditingLineId(null);
+    setSaveStatus("idle");
+    setScreen(destination);
+    window.scrollTo({top:0,behavior:"smooth"});
+  };
+
+  const editLine = (line: QuoteLine) => {
+    const {item}=line;
+    setProduct(line.product);
+    setEditingLineId(line.id);
+    setWidth(String(item.width));setHeight(String(item.height));
+    setQuantity(String(item.quantity));setRate(String(item.rate));
+    setPricingMethod(item.pricingMethod);
+    setSeries(item.sectionType);setGlass(item.glass);setColor(item.color);setLock(item.lock);
+    setLocation(item.location);setDescription(item.description);
+    setScreen("configure");
+  };
+
+  const removeLine = (id: string) => {
+    setQuoteLines(lines => lines.filter(line => line.id !== id));
+    setSaveStatus("idle");
+    if (quoteLines.length === 1) setScreen("catalog");
+  };
+
+  const startNewQuote = () => {
+    setQuoteLines([]);setEditingLineId(null);setQuotationNumber("");setProduct(null);
+    setCustomerName("");setProjectName("");setProjectAddress("");setDiscount("0");
+    setSaveStatus("idle");setScreen("catalog");
+  };
+
+  const saveDraft = async () => {
+    if (!quoteLines.length) return;
     setSaveStatus("saving");
     try {
+      const number=quotationNumber || `Q-${new Date().getFullYear()}-${Date.now()}`;
       const response = await fetch("/api/quotations", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          quotationNumber: `Q-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`,
+          quotationNumber: number,
           customerName: customerName || "Walk-in Customer",
           projectName: projectName || "New Project",
           projectAddress,
@@ -217,26 +278,12 @@ export default function Home() {
           discount: totals.discount,
           grandTotal: totals.grandTotal,
           totalSqft: totals.totalArea,
-          item: {
-            productName: product.name,
-            width: Number(width),
-            height: Number(height),
-            quantity: Math.max(1, Math.round(Number(quantity))),
-            sqft: totals.totalArea,
-            rate: Number(rate),
-            pricingMethod,
-            sectionCompany: "Analok",
-            sectionType: series || "N/A",
-            glass: glass || "N/A",
-            color: color || "N/A",
-            lock: lock || "N/A",
-            location,
-            description,
-            total: totals.subtotal,
-          },
+          item:quoteLines[0].item,
+          items:quoteLines.map(line=>line.item),
         }),
       });
       if (!response.ok) throw new Error();
+      setQuotationNumber(number);
       setSaveStatus("saved");
     } catch {
       setSaveStatus("error");
@@ -353,13 +400,13 @@ export default function Home() {
               <div className="header-actions">
                 <Button
                   variant="outline"
-                  onClick={() => setScreen(screen === "preview" ? "configure" : "catalog")}
+                  onClick={() => setScreen("catalog")}
                 >
                   <ArrowLeft />
                   Back
                 </Button>
                 {screen === "configure" && (
-                  <Button disabled={!canPreview} onClick={() => setScreen("preview")}>
+                  <Button disabled={!canPreview} onClick={() => addCurrentLine("preview")}>
                     Review Quote
                     <ChevronRight />
                   </Button>
@@ -442,6 +489,13 @@ export default function Home() {
                 <span>Select a size when available, then check the price before quoting.</span>
               </div>
             </div>
+            {quoteLines.length > 0 && <div className="admin-card no-print">
+              <strong>Current quote: {quoteLines.length} item(s) · {money.format(totals.grandTotal)}</strong>
+              <div className="quote-control-actions">
+                <Button onClick={() => setScreen("preview")}>Review quote</Button>
+                <Button variant="outline" onClick={startNewQuote}>Start a new quote</Button>
+              </div>
+            </div>}
             <div className="product-grid">
               {visibleProductFamilies.map(({family,variants}) => {
                 const item = variants.find(p=>p.id===selectedInvoiceSizes[family]) || variants[0];
@@ -657,7 +711,7 @@ export default function Home() {
                   <small>
                     {width || 0} × {height || 0} ft × {quantity || 0}
                   </small>
-                  <strong>{totals.totalArea.toFixed(2)} sq. ft.</strong>
+                  <strong>{itemTotals.totalArea.toFixed(2)} sq. ft.</strong>
                 </div>
                 <div>
                   <small>
@@ -667,18 +721,22 @@ export default function Home() {
                 </div>
                 <div className="price-total">
                   <small>Item total</small>
-                  <strong>{money.format(totals.subtotal)}</strong>
+                  <strong>{money.format(itemTotals.subtotal)}</strong>
                 </div>
-                <Button disabled={!canPreview} onClick={() => setScreen("preview")}>
-                  Continue to Quote <ChevronRight />
+                <Button disabled={!canPreview} onClick={() => addCurrentLine("preview")}>
+                  {editingLineId ? "Update item & review quote" : "Add item & review quote"} <ChevronRight />
                 </Button>
+                <Button variant="outline" disabled={!canPreview} onClick={() => addCurrentLine("catalog")}>
+                  {editingLineId ? "Update item & choose another" : "Add item & choose another"}
+                </Button>
+                {quoteLines.length > 0 && <small>{quoteLines.length} item(s) already in this quote</small>}
                 <p>Nothing is final until you save the quotation.</p>
               </aside>
             </div>
           </section>
         )}
 
-        {screen === "preview" && product && (
+        {screen === "preview" && quoteLines.length > 0 && (
           <section className="quote-workspace">
             <div className="quote-controls no-print">
               <div className="customer-form">
@@ -716,6 +774,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="quote-control-actions">
+                  <Button variant="outline" onClick={() => setScreen("catalog")}>Add another product</Button>
                   <Button
                     variant="outline"
                     onClick={saveDraft}
@@ -732,6 +791,7 @@ export default function Home() {
                     <Printer />
                     Print / Save PDF
                   </Button>
+                  <Button variant="outline" onClick={startNewQuote}>Start new quote</Button>
                 </div>
                 {saveStatus === "error" && (
                   <p className="error-text">
@@ -760,7 +820,7 @@ export default function Home() {
                   <small>Supply, fabrication & installation</small>
                 </div>
                 <div>
-                  <strong>Q-{new Date().getFullYear()}-DRAFT</strong>
+                  <strong>{quotationNumber || `Q-${new Date().getFullYear()}-DRAFT`}</strong>
                   <span>{quoteDate}</span>
                 </div>
               </div>
@@ -799,33 +859,37 @@ export default function Home() {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
+                    {quoteLines.map(({id, product: lineProduct, item}) => <tr key={id}>
                       <td data-label="Image">
-                        <ProductPicture product={product} />
+                        <ProductPicture product={lineProduct} />
                       </td>
                       <td data-label="Description">
-                        <strong>{product.name}</strong>
+                        <strong>{item.productName}</strong>
                         <span>
-                          {series} · {glass}
+                          {item.sectionType} · {item.glass}
                           <br />
-                          {color} · {lock}
+                          {item.color} · {item.lock}
                           <br />
-                          {location && (
+                          {item.location && (
                             <>
-                              Location: {location}
+                              Location: {item.location}
                               <br />
                             </>
                           )}
-                          {description}
+                          {item.description}
                         </span>
+                        <div className="no-print quote-control-actions">
+                          <Button variant="outline" onClick={() => editLine({id, product: lineProduct, item})}>Edit</Button>
+                          <Button variant="outline" onClick={() => removeLine(id)}>Remove</Button>
+                        </div>
                       </td>
-                      <td data-label="Width">{width} ft</td>
-                      <td data-label="Height">{height} ft</td>
-                      <td data-label="Qty">{quantity}</td>
-                      <td data-label="Sq. Ft.">{totals.totalArea.toFixed(2)}</td>
-                      <td data-label="Rate">{money.format(Number(rate) || 0)}</td>
-                      <td data-label="Total">{money.format(totals.subtotal)}</td>
-                    </tr>
+                      <td data-label="Width">{item.width} ft</td>
+                      <td data-label="Height">{item.height} ft</td>
+                      <td data-label="Qty">{item.quantity}</td>
+                      <td data-label="Sq. Ft.">{item.sqft.toFixed(2)}</td>
+                      <td data-label="Rate">{money.format(item.rate)} {item.pricingMethod === "unit" ? "/ unit" : "/ sq. ft."}</td>
+                      <td data-label="Total">{money.format(item.total)}</td>
+                    </tr>)}
                   </tbody>
                 </table>
               </div>
@@ -891,6 +955,7 @@ export default function Home() {
           <FinishedProjectsScreen
             onCatalogUpdated={refresh}
             onUseInConfigure={(configuredItem) => {
+              setEditingLineId(null);
               const matchingProduct = catalog.products.find(
                 (p) => p.name.toLowerCase() === configuredItem.productName.toLowerCase(),
               );

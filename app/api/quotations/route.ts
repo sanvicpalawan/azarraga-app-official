@@ -8,17 +8,10 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const quotationSchema = z.object({
-  quotationNumber: z.string().min(1),
-  customerName: z.string().min(1),
-  projectName: z.string().min(1),
-  projectAddress: z.string().default(""),
-  subtotal: z.number().nonnegative(),
-  discount: z.number().nonnegative(),
-  grandTotal: z.number().nonnegative(),
-  totalSqft: z.number().nonnegative(),
-  item: z.object({
+const itemSchema = z.object({
     productName: z.string().min(1),
+    productId: z.number().nullable().optional(),
+    imageUrl: z.string().nullable().optional(),
     width: z.number().nonnegative(),
     height: z.number().nonnegative(),
     quantity: z.number().int().positive(),
@@ -33,7 +26,18 @@ const quotationSchema = z.object({
     location: z.string().default(""),
     description: z.string().default(""),
     total: z.number().nonnegative(),
-  }),
+});
+const quotationSchema = z.object({
+  quotationNumber: z.string().min(1),
+  customerName: z.string().min(1),
+  projectName: z.string().min(1),
+  projectAddress: z.string().default(""),
+  subtotal: z.number().nonnegative(),
+  discount: z.number().nonnegative(),
+  grandTotal: z.number().nonnegative(),
+  totalSqft: z.number().nonnegative(),
+  item: itemSchema,
+  items: z.array(itemSchema).min(1).optional(),
 });
 
 export async function GET() {

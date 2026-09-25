@@ -333,7 +333,9 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
                 <div><strong>{quote.customerName} · {quote.quotationNumber}</strong><p>{quote.projectName} · {quote.projectAddress}</p></div>
                 <strong>{money.format(quote.grandTotal)}</strong>
               </div>
-              <p>{quote.item.productName} · {quote.item.width} × {quote.item.height} ft · Qty {quote.item.quantity} · {money.format(quote.item.rate)} {quote.item.pricingMethod==="sqft"?"per sq. ft.":"per set"}</p>
+              {(quote.items?.length ? quote.items : [quote.item]).map((item, index) => (
+                <p key={index}>{item.productName} · {item.width} × {item.height} ft · Qty {item.quantity} · {money.format(item.rate)} {item.pricingMethod === "sqft" ? "per sq. ft." : "per set"} · {money.format(item.total)}</p>
+              ))}
               <small>Saved {new Date(quote.createdAt).toLocaleDateString("en-PH")}</small>
             </article>
           )) : <div className="admin-card">No quotes saved yet. Make a quote in New Quote, then select Save Draft.</div>}
