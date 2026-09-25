@@ -9,9 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import type { Attribute, Catalog, Product } from "@/lib/catalog-types";
 import type { MediaAsset } from "@/lib/catalog-store-types";
+import DesignerScreen from "@/components/designer/DesignerScreen";
 
-type Props = { catalog: Catalog; refresh: () => Promise<void> };
-type Tab = "overview" | "company" | "products" | "images" | "attributes";
+type Props = { catalog: Catalog; refresh: () => Promise<void>; mode: "library" | "settings" };
+type Tab = "overview" | "company" | "products" | "images" | "attributes" | "studio";
 
 const tabLabels: Record<Tab, string> = {
   overview: "Overview",
@@ -19,6 +20,7 @@ const tabLabels: Record<Tab, string> = {
   products: "Products",
   images: "Image Library",
   attributes: "Dropdown Attributes",
+  studio: "Custom Design",
 };
 
 function formatSize(bytes: number): string {
@@ -53,8 +55,8 @@ async function normalizeImage(file: File) {
   return await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Image processing failed.")), "image/png", 0.92));
 }
 
-export function AdminDashboard({ catalog, refresh }: Props) {
-  const [tab, setTab] = useState<Tab>("overview");
+export function AdminDashboard({ catalog, refresh, mode }: Props) {
+  const [tab, setTab] = useState<Tab>(mode === "library" ? "products" : "company");
   const [notice, setNotice] = useState("");
   const [overview, setOverview] = useState({ totalQuotes: 0, totalRevenue: 0, totalSqft: 0, totalProducts: catalog.products.length, totalCategories: catalog.categories.length, totalMedia: 0 });
   const [settings, setSettings] = useState(catalog.settings);
@@ -225,11 +227,12 @@ export function AdminDashboard({ catalog, refresh }: Props) {
   };
 
   return <section className="admin-page">
-    <div className="admin-heading"><div><span className="eyebrow">No login required</span><h2>Admin Settings</h2><p>Every saved change updates the product chooser and quotation form.</p></div></div>
+    <div className="admin-heading"><div><span className="eyebrow">{mode === "library" ? "Reusable designs and images" : "Business setup"}</span><h2>{mode === "library" ? "Product Library" : "Settings"}</h2><p>{mode === "library" ? "Add products, manage their images, or draw a custom design. Saved products appear in New Quote." : "Update the company profile and quotation options."}</p></div></div>
     <div className="admin-tabs" role="tablist">
-      {(["overview", "company", "products", "images", "attributes"] as Tab[]).map((item) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{tabLabels[item]}</button>)}
+      {(mode === "library" ? ["products", "images", "studio"] : ["company", "attributes", "overview"]).map((item) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item as Tab)}>{tabLabels[item as Tab]}</button>)}
     </div>
     {notice && <div className="notice" role="status">{notice}</div>}
+    {tab === "studio" && <DesignerScreen onProductSaved={refresh} />}
 
     {tab === "overview" && <div className="stats-grid">
       <article><span>Total Quotes</span><strong>{overview.totalQuotes}</strong><small>Saved quotations</small></article>

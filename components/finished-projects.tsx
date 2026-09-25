@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { FinishedProject, FinishedProjectItem } from "@/lib/catalog-types";
+import type { Quotation } from "@/lib/catalog-store-types";
 
 const money = new Intl.NumberFormat("en-PH", {
   style: "currency",
@@ -44,6 +45,8 @@ type Props = {
 
 export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: Props) {
   const [projects, setProjects] = useState<FinishedProject[]>([]);
+  const [savedQuotes, setSavedQuotes] = useState<Quotation[]>([]);
+  const [historyTab, setHistoryTab] = useState<"saved" | "imported">("saved");
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [scanning, setScanning] = useState(false);
@@ -71,6 +74,9 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
       }
     }
     void load();
+    void fetch("/api/quotations").then(res=>res.json()).then(data=>{
+      if (!ignore && Array.isArray(data.quotations)) setSavedQuotes(data.quotations);
+    }).catch(err=>console.error("Failed to load saved quotes",err));
     return () => {
       ignore = true;
     };
@@ -314,12 +320,31 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
 
   return (
     <section className="finished-projects-view">
+      <div className="admin-tabs" role="tablist" aria-label="Project records">
+        <button role="tab" aria-selected={historyTab==="saved"} className={historyTab==="saved"?"active":""} onClick={()=>setHistoryTab("saved")}>Saved Quotes ({savedQuotes.length})</button>
+        <button role="tab" aria-selected={historyTab==="imported"} className={historyTab==="imported"?"active":""} onClick={()=>setHistoryTab("imported")}>Imported PDFs ({projects.length})</button>
+      </div>
+      {historyTab==="saved" ? (
+        <div className="admin-stack">
+          <div className="admin-card"><h2>Saved Quotes</h2><p>Quotes created in New Quote are stored here by customer and project.</p></div>
+          {savedQuotes.length ? savedQuotes.map(quote=>(
+            <article className="admin-card" key={quote.id}>
+              <div className="project-detail-header">
+                <div><strong>{quote.customerName} · {quote.quotationNumber}</strong><p>{quote.projectName} · {quote.projectAddress}</p></div>
+                <strong>{money.format(quote.grandTotal)}</strong>
+              </div>
+              <p>{quote.item.productName} · {quote.item.width} × {quote.item.height} ft · Qty {quote.item.quantity} · {money.format(quote.item.rate)} {quote.item.pricingMethod==="sqft"?"per sq. ft.":"per set"}</p>
+              <small>Saved {new Date(quote.createdAt).toLocaleDateString("en-PH")}</small>
+            </article>
+          )) : <div className="admin-card">No quotes saved yet. Make a quote in New Quote, then select Save Draft.</div>}
+        </div>
+      ) : (<>
       {/* Top Banner / Intro */}
       <div className="projects-header-banner">
         <div className="banner-text">
           <div className="badge-pill">
             <Sparkles className="w-4 h-4 text-sky-500" />
-            <span>Finished Projects & Invoice Scanner</span>
+            <span>Historical PDF Records</span>
           </div>
           <h2>Historical Quotations & Product Drawings</h2>
           <p>
@@ -330,9 +355,9 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
 
         <div className="banner-stats">
           <div className="stat-card">
-            <span>Stored Projects</span>
+            <span>Imported PDFs</span>
             <strong>{projects.length}</strong>
-            <small>Completed Invoices</small>
+            <small>Historical quotations</small>
           </div>
           <div className="stat-card">
             <span>Extracted Products</span>
@@ -650,12 +675,13 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
           ) : (
             <div className="empty-detail-placeholder">
               <FolderArchive className="w-12 h-12 text-slate-300" />
-              <h3>Select a Finished Project</h3>
+              <h3>Select an imported quotation</h3>
               <p>Choose an invoice from the list or upload a new one to view extracted drawings.</p>
             </div>
           )}
         </main>
       </div>
+      </>)}
     </section>
   );
 }

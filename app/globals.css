@@ -404,7 +404,7 @@ button { cursor: pointer; }
   .field-stack input, .field-stack select, .field-stack textarea { max-width: 100%; }
   .quote-bottom-grid { grid-template-columns: 1fr; }
   .totals-box { border-top: 1px solid #bdcad7; border-left: 0; }
-  .mobile-nav { position: sticky; top: 0; z-index: 19; display: grid; grid-template-columns: repeat(5, 1fr); border-bottom: 1px solid #d6e0e9; background: #fff; }
+  .mobile-nav { position: sticky; top: 0; z-index: 19; display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid #d6e0e9; background: #fff; }
   .mobile-nav button { display: flex; min-width: 0; flex-direction: column; align-items: center; gap: 3px; border: 0; border-bottom: 3px solid transparent; background: transparent; padding: 9px 3px 7px; color: #718197; font-size: .63rem; font-weight: 750; }
   .mobile-nav button.active { border-color: #0f4c81; color: #0f4c81; }
   .mobile-nav svg { width: 18px; }

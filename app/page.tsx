@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  AlertCircle,
   ArrowLeft,
   Building2,
-  Calculator,
   Check,
   ChevronRight,
   Download,
@@ -14,17 +12,12 @@ import {
   ImageIcon,
   LayoutGrid,
   PackagePlus,
-  PencilRuler,
   Printer,
   Save,
   Search,
   Settings2,
-  Sparkles,
-  UploadCloud,
-  X,
 } from "lucide-react";
 import { AdminDashboard } from "@/components/admin-dashboard";
-import DesignerScreen from "@/components/designer/DesignerScreen";
 import { FinishedProjectsScreen } from "@/components/finished-projects";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,7 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import type { Attribute, Catalog, Product } from "@/lib/catalog-types";
 
-type Screen = "catalog" | "configure" | "preview" | "projects" | "designer" | "admin";
+type Screen = "catalog" | "configure" | "preview" | "projects" | "library" | "admin";
 const money = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 2 });
 
 function ProductPicture({ product, className = "" }: { product: Product; className?: string }) {
@@ -105,9 +98,6 @@ export default function Home() {
     [projectName, setProjectName] = useState(""),
     [projectAddress, setProjectAddress] = useState("");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [chooserNotice, setChooserNotice] = useState("");
-  const [chooserNudge, setChooserNudge] = useState(0);
-  const productChooserRef = useRef<HTMLElement | null>(null);
 
   const refresh = async () => {
     const response = await fetch("/api/catalog", { cache: "no-store" });
@@ -188,7 +178,6 @@ export default function Home() {
   }, [visibleProducts]);
 
   const chooseProduct = (item: Product) => {
-    setChooserNotice("");
     setProduct(item);
     setRate(String(item.basePrice || 0));
     if (item.description.includes("Historical price")) {
@@ -211,29 +200,6 @@ export default function Home() {
   const canPreview = Boolean(
     product && Number(width) > 0 && Number(height) > 0 && Number(quantity) > 0 && Number(rate) >= 0,
   );
-
-  const goAfterChoosingProduct = (target: "configure" | "quote") => {
-    if (product) {
-      setChooserNotice("");
-      setScreen(target === "configure" ? "configure" : "preview");
-      return;
-    }
-    setScreen("catalog");
-    setChooserNotice(
-      target === "configure"
-        ? "Choose a product first — click any product card below to start configuring it."
-        : "Choose a product first — a quotation needs a selected product to price.",
-    );
-    setChooserNudge((count) => count + 1);
-  };
-
-  useEffect(() => {
-    if (!chooserNotice) return;
-    const node = productChooserRef.current;
-    if (!node) return;
-    node.scrollIntoView({ behavior: "smooth", block: "start" });
-    node.focus({ preventScroll: true });
-  }, [chooserNudge, chooserNotice]);
 
   const saveDraft = async () => {
     if (!product || !canPreview) return;
@@ -315,51 +281,37 @@ export default function Home() {
         </div>
         <nav aria-label="App sections">
           <button
-            className={`rail-link ${screen === "catalog" ? "active" : ""}`}
+            className={`rail-link ${["catalog","configure","preview"].includes(screen) ? "active" : ""}`}
             onClick={() => setScreen("catalog")}
           >
             <LayoutGrid />
-            Choose Product
-          </button>
-          <button
-            className={`rail-link ${screen === "configure" ? "active" : ""}`}
-            onClick={() => goAfterChoosingProduct("configure")}
-          >
-            <Calculator />
-            Configure
-          </button>
-          <button
-            className={`rail-link ${screen === "preview" ? "active" : ""}`}
-            onClick={() => goAfterChoosingProduct("quote")}
-          >
-            <FileText />
-            Quote & Invoice
+            New Quote
           </button>
           <button
             className={`rail-link ${screen === "projects" ? "active" : ""}`}
             onClick={() => setScreen("projects")}
           >
             <FolderArchive />
-            Finished Projects
+            Projects & Prices
           </button>
           <button
-            className={`rail-link ${screen === "designer" ? "active" : ""}`}
-            onClick={() => setScreen("designer")}
+            className={`rail-link ${screen === "library" ? "active" : ""}`}
+            onClick={() => setScreen("library")}
           >
-            <PencilRuler />
-            Designer Studio
+            <PackagePlus />
+            Product Library
           </button>
           <button
             className={`rail-link ${screen === "admin" ? "active" : ""}`}
             onClick={() => setScreen("admin")}
           >
             <Settings2 />
-            Admin Settings
+            Settings
           </button>
         </nav>
         <div className="rail-help">
           <strong>Simple workflow</strong>
-          <span>Choose → Configure → Quote</span>
+          <span>Product → Size & Price → Quote</span>
         </div>
       </aside>
 
@@ -377,32 +329,26 @@ export default function Home() {
           <div className="title-block">
             <div>
               <p>
-                {screen === "admin"
-                  ? "Manage the app"
-                  : screen === "designer"
-                  ? "Draw windows, doors & glass works"
-                  : screen === "projects"
-                  ? "Finished invoices & extracted drawings"
-                  : "Windows, doors & glass works"}
+                {screen === "admin" ? "Company profile and options" : screen === "library" ? "Products, images, and custom designs" : screen === "projects" ? "Saved quotes and imported PDFs" : "Create a quotation"}
               </p>
               <h1>
                 {screen === "catalog"
-                  ? "Choose a Product"
+                  ? "New Quote · Choose Product"
                   : screen === "configure"
                   ? "Configure Product"
                   : screen === "preview"
                   ? "Quote & Invoice"
                   : screen === "projects"
-                  ? "Finished Projects"
-                  : screen === "designer"
-                  ? "Designer Studio"
-                  : "Admin Settings"}
+                  ? "Projects & Prices"
+                  : screen === "library"
+                  ? "Product Library"
+                  : "Settings"}
               </h1>
             </div>
           </div>
           {screen !== "catalog" &&
             screen !== "admin" &&
-            screen !== "designer" &&
+            screen !== "library" &&
             screen !== "projects" && (
               <div className="header-actions">
                 <Button
@@ -430,25 +376,11 @@ export default function Home() {
 
         <nav className="mobile-nav no-print" aria-label="Mobile navigation">
           <button
-            className={screen === "catalog" ? "active" : ""}
+            className={["catalog","configure","preview"].includes(screen) ? "active" : ""}
             onClick={() => setScreen("catalog")}
           >
             <LayoutGrid />
-            Products
-          </button>
-          <button
-            className={screen === "configure" ? "active" : ""}
-            onClick={() => goAfterChoosingProduct("configure")}
-          >
-            <Calculator />
-            Configure
-          </button>
-          <button
-            className={screen === "preview" ? "active" : ""}
-            onClick={() => goAfterChoosingProduct("quote")}
-          >
-            <FileText />
-            Quote
+            New Quote
           </button>
           <button
             className={screen === "projects" ? "active" : ""}
@@ -458,36 +390,23 @@ export default function Home() {
             Projects
           </button>
           <button
-            className={screen === "designer" ? "active" : ""}
-            onClick={() => setScreen("designer")}
+            className={screen === "library" ? "active" : ""}
+            onClick={() => setScreen("library")}
           >
-            <PencilRuler />
-            Designer
+            <PackagePlus />
+            Library
           </button>
           <button
             className={screen === "admin" ? "active" : ""}
             onClick={() => setScreen("admin")}
           >
             <Settings2 />
-            Admin
+            Settings
           </button>
         </nav>
 
         {screen === "catalog" && (
-          <section className="catalog-page" ref={productChooserRef} tabIndex={-1}>
-            {chooserNotice && (
-              <div className="selection-notice" role="status" aria-live="polite">
-                <AlertCircle />
-                <span>{chooserNotice}</span>
-                <button
-                  type="button"
-                  aria-label="Dismiss notice"
-                  onClick={() => setChooserNotice("")}
-                >
-                  <X />
-                </button>
-              </div>
-            )}
+          <section className="catalog-page">
             <div className="catalog-tools">
               <div className="search-box">
                 <Search />
@@ -517,34 +436,10 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="invoice-ocr-quick-callout">
-              <div className="callout-left">
-                <Sparkles className="w-5 h-5 text-sky-600 shrink-0" />
-                <div>
-                  <strong>Finished Projects & Invoice Drawing OCR</strong>
-                  <p>Upload invoices to extract drawings & specs directly into Products so you never have to redraw them.</p>
-                </div>
-              </div>
-              <Button size="sm" onClick={() => setScreen("projects")} className="bg-sky-700 hover:bg-sky-800 text-white shrink-0">
-                <UploadCloud className="w-4 h-4 mr-1" />
-                Upload Invoice & Extract Drawings
-              </Button>
-            </div>
-
             <div className="catalog-summary">
               <div>
                 <strong>{visibleProductFamilies.length} product families</strong>
                 <span>Select a size when available, then check the price before quoting.</span>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setScreen("projects")}>
-                  <FolderArchive />
-                  Finished Invoices
-                </Button>
-                <Button variant="outline" onClick={() => setScreen("admin")}>
-                  <PackagePlus />
-                  Manage Products
-                </Button>
               </div>
             </div>
             <div className="product-grid">
@@ -1038,14 +933,8 @@ export default function Home() {
           />
         )}
 
-        {screen === "admin" && (
-          <AdminDashboard key={catalog.settings.updatedAt} catalog={catalog} refresh={refresh} />
-        )}
-
-        {screen === "designer" && (
-          <section className="designer-page">
-            <DesignerScreen onProductSaved={refresh} />
-          </section>
+        {(screen === "library" || screen === "admin") && (
+          <AdminDashboard key={screen} mode={screen === "library" ? "library" : "settings"} catalog={catalog} refresh={refresh} />
         )}
       </section>
     </main>
