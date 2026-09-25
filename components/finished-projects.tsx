@@ -145,7 +145,24 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
     });
   };
 
-  const handleSaveToCatalog = async (item: FinishedProjectItem, project: FinishedProject) => {
+  const [savingAll, setSavingAll] = useState(false);
+
+  const handleSaveAll = async (project: FinishedProject) => {
+    setSavingAll(true);
+    let ok = 0;
+    const failed: string[] = [];
+    for (const item of project.items) {
+      if (await handleSaveToCatalog(item, project, true)) ok++;
+      else failed.push(item.name);
+    }
+    await onCatalogUpdated();
+    setSavingAll(false);
+    setImportedSuccess(`Saved ${ok} of ${project.items.length} items (with drawings) to Products.`);
+    setTimeout(() => setImportedSuccess(null), 5000);
+    if (failed.length) alert("Could not save: " + failed.join(", "));
+  };
+
+  const handleSaveToCatalog = async (item: FinishedProjectItem, project: FinishedProject, bulk = false): Promise<boolean> => {
     setImportingId(item.id);
     try {
       // 1. Create product in catalog
@@ -183,7 +200,8 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
         if (item.imageDataUrl.startsWith("data:")) {
           const parts = item.imageDataUrl.split(",");
           mime = parts[0].split(";")[0].replace("data:", "");
-          const binary = atob(parts[1]);
+          const isB64 = parts[0].includes(";base64");
+          const binary = isB64 ? atob(parts[1]) : unescape(decodeURIComponent(parts[1]));
           const bytes = new Uint8Array(binary.length);
           for (let i = 0; i < binary.length; i++) {
             bytes[i] = binary.charCodeAt(i);
@@ -202,7 +220,7 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
               "content-type": "application/json",
             },
             body: JSON.stringify({
-              filename: `${item.name.toLowerCase().replace(/[^a-z0-9]/g, "-")}.png`,
+              filename: `${item.name.toLowerCase().replace(/[^a-z0-9]/g, "-")}.${mime.includes("svg") ? "svg" : "png"}`,
               contentType: mime,
               sizeBytes: arrayBuffer.byteLength,
               body: Array.from(new Uint8Array(arrayBuffer)),
@@ -219,15 +237,20 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
         }
       }
 
-      await onCatalogUpdated();
-      setImportedSuccess(`Saved "${item.name}" to Products! Image linked.`);
-      setTimeout(() => setImportedSuccess(null), 4000);
+      if (!bulk) {
+        await onCatalogUpdated();
+        setImportedSuccess(`Saved "${item.name}" to Products! Image linked.`);
+        setTimeout(() => setImportedSuccess(null), 4000);
+      }
+      return true;
     } catch (err) {
       console.error("Could not import product", err);
+      if (bulk) return false;
       alert("Error adding product to catalog: " + (err instanceof Error ? err.message : String(err)));
     } finally {
       setImportingId(null);
     }
+    return false;
   };
 
   const handleUseInConfigure = (item: FinishedProjectItem) => {
@@ -459,6 +482,14 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
                 </div>
 
                 <div className="header-project-actions">
+                  <Button
+                    size="sm"
+                    disabled={savingAll || activeProject.items.length === 0}
+                    onClick={() => handleSaveAll(activeProject)}
+                  >
+                    {savingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                    Save All ({activeProject.items.length}) to Catalog
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
