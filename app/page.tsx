@@ -175,11 +175,30 @@ export default function Home() {
         .sort((a, b) => Number(b.isCustom) - Number(a.isCustom)) || [],
     [catalog, selectedCategory, search],
   );
+  const [selectedInvoiceSizes, setSelectedInvoiceSizes] = useState<Record<string, number>>({});
+  const visibleProductFamilies = useMemo(() => {
+    const groups = new Map<string, Product[]>();
+    for (const item of visibleProducts) {
+      const family = item.description.includes("Historical quote")
+        ? item.name.replace(/\s*—\s*\d+(?:\.\d+)?\s*×\s*\d+(?:\.\d+)?\s*m$/, "")
+        : `product-${item.id}`;
+      groups.set(family, [...(groups.get(family) || []), item]);
+    }
+    return [...groups.entries()].map(([family, variants]) => ({ family, variants }));
+  }, [visibleProducts]);
 
   const chooseProduct = (item: Product) => {
     setChooserNotice("");
     setProduct(item);
     setRate(String(item.basePrice || 0));
+    if (item.description.includes("Historical quote")) {
+      setPricingMethod("unit");
+      const dimensions = item.name.match(/—\s*(\d+(?:\.\d+)?)\s*×\s*(\d+(?:\.\d+)?)\s*m$/);
+      if (dimensions) {
+        setWidth(String(+(Number(dimensions[1])*3.28084).toFixed(4)));
+        setHeight(String(+(Number(dimensions[2])*3.28084).toFixed(4)));
+      }
+    }
     setSeries(item.defaultSeries || grouped.series[0]?.name || "");
     setGlass(item.defaultGlass || grouped.glass[0]?.name || "");
     setColor(grouped.color[0]?.name || "");
@@ -514,8 +533,8 @@ export default function Home() {
 
             <div className="catalog-summary">
               <div>
-                <strong>{visibleProducts.length} products</strong>
-                <span>Select a product to enter sizes and pricing.</span>
+                <strong>{visibleProductFamilies.length} product families</strong>
+                <span>Select a size when available, then check the price before quoting.</span>
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setScreen("projects")}>
@@ -529,10 +548,20 @@ export default function Home() {
               </div>
             </div>
             <div className="product-grid">
-              {visibleProducts.map((item) => (
+              {visibleProductFamilies.map(({family,variants}) => {
+                const item = variants.find(p=>p.id===selectedInvoiceSizes[family]) || variants[0];
+                return (
+                <div key={family}>
+                {variants.length > 1 && (
+                  <label style={{display:"block",marginBottom:8}}>
+                    <span style={{display:"block",fontSize:12}}>Select size · {family}</span>
+                    <select aria-label={`Size for ${family}`} value={item.id} onChange={event=>setSelectedInvoiceSizes(previous=>({...previous,[family]:Number(event.target.value)}))}>
+                      {variants.map(variant=><option key={variant.id} value={variant.id}>{variant.name.replace(family,"").replace(/^\s*—\s*/,"")}</option>)}
+                    </select>
+                  </label>
+                )}
                 <button
                   className="product-card"
-                  key={item.id}
                   onClick={() => chooseProduct(item)}
                 >
                   <ProductPicture product={item} />
@@ -546,7 +575,7 @@ export default function Home() {
                   <div>
                     <strong>
                       {item.basePrice > 0
-                        ? `${money.format(item.basePrice)} base rate`
+                        ? item.description.includes("Historical quote") ? `${money.format(item.basePrice)} historical unit price` : `${money.format(item.basePrice)} base rate`
                         : "Set price in quote"}
                     </strong>
                     <span>
@@ -554,7 +583,8 @@ export default function Home() {
                     </span>
                   </div>
                 </button>
-              ))}
+                </div>
+              );})}
             </div>
             {!visibleProducts.length && (
               <div className="empty-state">
@@ -996,6 +1026,7 @@ export default function Home() {
               setWidth(String(configuredItem.width || 8));
               setHeight(String(configuredItem.height || 5));
               setRate(String(configuredItem.rate || 0));
+              setPricingMethod("unit");
               if (configuredItem.series) setSeries(configuredItem.series);
               if (configuredItem.glass) setGlass(configuredItem.glass);
               if (configuredItem.color) setColor(configuredItem.color);

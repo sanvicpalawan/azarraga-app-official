@@ -49,6 +49,8 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
   const [scanning, setScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState("");
   const [activeProject, setActiveProject] = useState<FinishedProject | null>(null);
+  const [pendingProjects, setPendingProjects] = useState<FinishedProject[]>([]);
+  const [importError, setImportError] = useState("");
   const [importingId, setImportingId] = useState<string | null>(null);
   const [importedSuccess, setImportedSuccess] = useState<string | null>(null);
 
@@ -91,7 +93,9 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
     if (!files || files.length === 0) return;
 
     setScanning(true);
+    setImportError("");
     setScanMessage(`Uploading & scanning ${files.length} invoice(s)...`);
+    const extracted: FinishedProject[] = [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -113,27 +117,62 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
         });
 
         const extractData = await extractRes.json();
-        if (extractRes.ok && extractData.project) {
-          // Save project to database / store
-          const saveRes = await fetch("/api/projects", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(extractData.project),
-          });
-          const saveData = await saveRes.json();
-          if (saveRes.ok && saveData.project) {
-            setActiveProject(saveData.project);
-          }
+        if (extractRes.ok && extractData.projects?.length) {
+          for (const project of extractData.projects) extracted.push({ ...project, id: -(extracted.length + 1) });
+        } else {
+          setImportError(prev => prev + `${file.name}: ${extractData.error || "Could not extract invoice."}\n`);
         }
       } catch (err) {
         console.error("Error parsing file", file.name, err);
+        setImportError(prev => prev + `${file.name}: ${err instanceof Error ? err.message : "Upload failed."}\n`);
       }
     }
-
-    await refreshProjectsList();
+    if (extracted.length) {
+      setPendingProjects(extracted);
+      setActiveProject(extracted[0]);
+    }
     setScanning(false);
     setScanMessage("");
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const editPendingItem = (id: string, changes: Partial<FinishedProjectItem>) => {
+    setPendingProjects(previous => {
+      const next = previous.map((project, i) => i ? project : {
+        ...project,
+        items: project.items.map(item => item.id === id ? { ...item, ...changes } : item),
+      });
+      setActiveProject(next[0]);
+      return next;
+    });
+  };
+
+  const saveReviewedProject = async () => {
+    const project = pendingProjects[0];
+    if (!project) return;
+    const options = [...new Set(project.items.map(item => item.quoteOption || 1))];
+    const subtotal = project.items.reduce((sum,item) => sum + (item.total || 0),0);
+    const delivery = Number(project.notes?.match(/Delivery: ₱([\d.]+)/)?.[1] || 0);
+    const existingProject = projects.find(saved => saved.invoiceNumber === project.invoiceNumber && saved.fileName === project.fileName);
+    const revised = { ...project, id: existingProject?.id, totalAmount: subtotal + delivery };
+    if (!project.items.length || project.items.some(item => !item.name || !item.quantity || !item.rate)) {
+      setImportError("Each line needs a name, quantity, and historical unit price before saving.");
+      return;
+    }
+    setScanning(true);
+    try {
+      const response = await fetch("/api/projects", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(revised) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not save the reviewed quotation.");
+      await refreshProjectsList();
+      const remaining = pendingProjects.slice(1);
+      setPendingProjects(remaining);
+      setActiveProject(remaining[0] || data.project);
+      setImportedSuccess(`Saved ${project.items.length} original items from ${options.length} quote option(s). Historical prices retained.`);
+      setImportError("");
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Could not save quotation.");
+    } finally { setScanning(false); }
   };
 
   const readFileAsDataUrl = (file: File): Promise<string> => {
@@ -157,7 +196,7 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
     }
     await onCatalogUpdated();
     setSavingAll(false);
-    setImportedSuccess(`Saved ${ok} of ${project.items.length} items (with drawings) to Products.`);
+    setImportedSuccess(`Saved ${ok} of ${project.items.length} size variants to Products; original drawings attached where present.`);
     setTimeout(() => setImportedSuccess(null), 5000);
     if (failed.length) alert("Could not save: " + failed.join(", "));
   };
@@ -173,14 +212,12 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
       ) || catData.categories?.[0];
 
       const productPayload = {
-        name: item.name,
+        name: `${item.name}${item.widthM && item.heightM ? ` — ${item.widthM} × ${item.heightM} m` : ""}`,
         categoryId: category ? category.id : 1,
         basePrice: item.rate || 0,
-        description: item.description || `Extracted from invoice ${project.invoiceNumber}`,
+        description: `${item.description || item.name} · Historical quote ${project.invoiceNumber}, ${project.invoiceDate}. Price requires confirmation before a new quote.`,
         defaultSeriesId: null,
         defaultGlassId: null,
-        isCustom: true,
-        productKey: `INV-${project.invoiceNumber.slice(-4)}-${item.name.replace(/[^a-zA-Z0-9]/g, "").slice(0, 4).toUpperCase()}`,
       };
 
       const addProdRes = await fetch("/api/products", {
@@ -190,56 +227,30 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
       });
 
       const newProduct = await addProdRes.json();
-      if (!addProdRes.ok) throw new Error(newProduct.error || "Failed to add product");
+      let productId = newProduct.id as number;
+      if (!addProdRes.ok) {
+        // Same family and measurements were already imported. Use that catalog entry.
+        const existing = catData.products?.find((p: {id:number,name:string,categoryId:number}) =>
+          p.name === productPayload.name && p.categoryId === productPayload.categoryId);
+        if (existing) productId = existing.id;
+        else
+        throw new Error(newProduct.error || "Failed to add product");
+      }
 
       // 2. If the item has an image, attach it to the product and media library
       if (item.imageDataUrl) {
-        let arrayBuffer: ArrayBuffer | null = null;
-        let mime = "image/png";
-
-        if (item.imageDataUrl.startsWith("data:")) {
-          const parts = item.imageDataUrl.split(",");
-          mime = parts[0].split(";")[0].replace("data:", "");
-          const isB64 = parts[0].includes(";base64");
-          const binary = isB64 ? atob(parts[1]) : unescape(decodeURIComponent(parts[1]));
-          const bytes = new Uint8Array(binary.length);
-          for (let i = 0; i < binary.length; i++) {
-            bytes[i] = binary.charCodeAt(i);
-          }
-          arrayBuffer = bytes.buffer;
-        } else if (item.imageDataUrl.startsWith("/")) {
-          const imgFetch = await fetch(item.imageDataUrl);
-          arrayBuffer = await imgFetch.arrayBuffer();
-          mime = item.imageDataUrl.endsWith(".svg") ? "image/svg+xml" : "image/png";
-        }
-
-        if (arrayBuffer) {
-          const mediaRes = await fetch("/api/media", {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-            },
-            body: JSON.stringify({
-              filename: `${item.name.toLowerCase().replace(/[^a-z0-9]/g, "-")}.${mime.includes("svg") ? "svg" : "png"}`,
-              contentType: mime,
-              sizeBytes: arrayBuffer.byteLength,
-              body: Array.from(new Uint8Array(arrayBuffer)),
-            }),
-          });
-          const mediaData = await mediaRes.json();
-          if (mediaRes.ok && mediaData.id) {
-            await fetch(`/api/products/${newProduct.id}/image`, {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ mediaId: mediaData.id }),
-            });
-          }
-        }
+        const response = await fetch(item.imageDataUrl);
+        const blob = await response.blob();
+        const form = new FormData();
+        const ext = blob.type === "image/jpeg" ? "jpg" : blob.type === "image/webp" ? "webp" : "png";
+        form.append("image", new File([blob], `${item.itemCode || "drawing"}.${ext}`, {type:blob.type || "image/png"}));
+        const uploaded = await fetch(`/api/products/${productId}/image`, { method:"POST",body:form });
+        if (!uploaded.ok) throw new Error("Product created, but its original invoice drawing could not be attached.");
       }
 
       if (!bulk) {
         await onCatalogUpdated();
-        setImportedSuccess(`Saved "${item.name}" to Products! Image linked.`);
+        setImportedSuccess(`Saved "${item.name}" to Products${item.imageDataUrl ? " with its source drawing" : ""}.`);
         setTimeout(() => setImportedSuccess(null), 4000);
       }
       return true;
@@ -308,11 +319,10 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
             <Sparkles className="w-4 h-4 text-sky-500" />
             <span>Finished Projects & Invoice Scanner</span>
           </div>
-          <h2>Finished Projects & Invoice Drawing OCR</h2>
+          <h2>Historical Quotations & Product Drawings</h2>
           <p>
-            Upload completed invoices to automatically scan, OCR, and extract the exact window
-            and door drawings. Save them directly into the <strong>Product Catalog</strong> so
-            clients and estimators never have to manually redraw or re-upload images for invoices again.
+            Import past PDF quotations, check every line and its original drawing, then save
+            the records. Historical prices require review before a new quote.
           </p>
         </div>
 
@@ -344,7 +354,7 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".pdf,image/png,image/jpeg,image/webp"
+          accept=".pdf,application/pdf"
           className="hidden"
           onChange={handleFileUpload}
         />
@@ -360,11 +370,10 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
             <h3>
               {scanning
                 ? scanMessage
-                : "Upload Finished Project Invoices (PDF or Images)"}
+                : "Upload Historical PDF Quotations"}
             </h3>
             <p>
-              Drag and drop invoice files here, or click to browse. Automatically extracts
-              window/door drawings, measurements, specs, and totals.
+              Select text-based PDFs to review product drawings, dimensions, prices, and totals before saving.
             </p>
           </div>
           <Button
@@ -382,6 +391,13 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
         <div className="success-banner" role="status">
           <CheckCircle2 className="w-5 h-5 text-emerald-600" />
           <span>{importedSuccess}</span>
+        </div>
+      )}
+      {importError && <div className="drawing-help-callout" role="alert" style={{whiteSpace:"pre-wrap",color:"#9f1239"}}>{importError}</div>}
+      {pendingProjects.length > 0 && (
+        <div className="drawing-help-callout" role="status">
+          Review ${pendingProjects.length} invoice(s) before saving. The PDF is not in your database yet.
+          {pendingProjects.length > 1 && " The next invoice opens after you confirm this one."}
         </div>
       )}
 
@@ -482,15 +498,20 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
                 </div>
 
                 <div className="header-project-actions">
+                  {pendingProjects.length > 0 && activeProject.id === pendingProjects[0].id && (
+                    <Button size="sm" disabled={scanning} onClick={saveReviewedProject}>
+                      {scanning ? "Saving…" : "Confirm & Save Reviewed Invoice"}
+                    </Button>
+                  )}
                   <Button
                     size="sm"
-                    disabled={savingAll || activeProject.items.length === 0}
+                    disabled={savingAll || activeProject.items.length === 0 || activeProject.id < 0}
                     onClick={() => handleSaveAll(activeProject)}
                   >
                     {savingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                     Save All ({activeProject.items.length}) to Catalog
                   </Button>
-                  <Button
+                  {activeProject.id > 0 && <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleDeleteProject(activeProject.id)}
@@ -498,7 +519,7 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
                   >
                     <Trash2 className="w-4 h-4" />
                     Delete
-                  </Button>
+                  </Button>}
                 </div>
               </div>
 
@@ -508,7 +529,8 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
                 <div>
                   <strong>Window & Door Drawings Extracted from Invoice</strong>
                   <p>
-                    Each item below was extracted from this invoice with its exact elevation drawing.
+                    Drawings shown below are cropped from the original PDF beside their line items.
+                    Empty cells stay empty until you attach a source image.
                     Click <strong>&ldquo;Save to Products&rdquo;</strong> to add it to your catalog
                     and image library so it shows automatically in the quotation table.
                   </p>
@@ -533,7 +555,7 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
                         ) : (
                           <div className="no-drawing">
                             <ImageIcon className="w-6 h-6 text-slate-400" />
-                            <span>No drawing</span>
+                            <span>No artwork in this PDF row</span>
                           </div>
                         )}
                         <span className="category-corner-tag">{item.category}</span>
@@ -541,9 +563,25 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
 
                       {/* Item Details */}
                       <div className="item-info-col">
-                        <h5>{item.name}</h5>
+                        <h5>{item.itemCode && `${item.itemCode} · `}{item.name}{item.quoteOption && <small> · Option {item.quoteOption}</small>}</h5>
+                        {activeProject.id < 0 && (
+                          <div style={{display:"grid",gap:8,margin:"10px 0"}}>
+                            {!item.imageDataUrl && <label>Attach a source drawing, if available
+                              <Input type="file" accept="image/png,image/jpeg,image/webp" onChange={async e=>{
+                                const image=e.target.files?.[0];
+                                if (image) editPendingItem(item.id,{imageDataUrl:await readFileAsDataUrl(image)});
+                              }} />
+                            </label>}
+                            <Input aria-label="Product name" value={item.name} onChange={e=>editPendingItem(item.id,{name:e.target.value})} />
+                            <Input aria-label="Full invoice description" value={item.description || ""} onChange={e=>editPendingItem(item.id,{description:e.target.value})} />
+                            <div style={{display:"flex",gap:6}}>
+                              <Input aria-label="Quantity" type="number" min="1" value={item.quantity || ""} onChange={e=>{ const quantity=Number(e.target.value); editPendingItem(item.id,{quantity,total:quantity*(item.rate||0)}); }} />
+                              <Input aria-label="Historical unit price" type="number" min="0" step=".01" value={item.rate || ""} onChange={e=>{ const rate=Number(e.target.value); editPendingItem(item.id,{rate,total:rate*(item.quantity||0)}); }} />
+                            </div>
+                          </div>
+                        )}
                         <p className="item-specs-line">
-                          {item.widthFt} × {item.heightFt} ft
+                          {item.widthM && item.heightM ? `${item.widthM} × ${item.heightM} m` : "Dimensions: review source PDF"}
                           {item.series && ` · ${item.series}`}
                           {item.glass && ` · ${item.glass}`}
                           {item.color && ` · ${item.color}`}
@@ -570,7 +608,7 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
                           <Button
                             variant="default"
                             size="sm"
-                            disabled={importingId === item.id}
+                            disabled={importingId === item.id || activeProject.id < 0}
                             onClick={() => handleSaveToCatalog(item, activeProject)}
                             className="save-catalog-btn"
                           >
@@ -585,6 +623,7 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
                           <Button
                             variant="outline"
                             size="sm"
+                            disabled={activeProject.id < 0}
                             onClick={() => handleUseInConfigure(item)}
                           >
                             <ArrowRight className="w-4 h-4" />

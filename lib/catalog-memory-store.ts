@@ -14,7 +14,6 @@ import type {
   StoredFile,
 } from "./catalog-store-types";
 import { buildDefaultCatalogData } from "./catalog-seed";
-import { defaultProjectsSeed } from "./projects-seed";
 
 /** A library image as stored in memory; the view adds usage and the URL. */
 type MediaRecord = {
@@ -52,10 +51,7 @@ function createInitialState(): CatalogState {
     attributes: data.attributes.map((attribute) => ({ ...attribute })),
     products: data.products.map((product) => ({ ...product })),
     quotations: [],
-    projects: defaultProjectsSeed.map((project) => ({
-      ...project,
-      items: project.items.map((item) => ({ ...item })),
-    })),
+    projects: [],
     media: [],
     files: new Map(),
     nextProductId: data.products.length + 1,
@@ -63,7 +59,7 @@ function createInitialState(): CatalogState {
     nextAttributeId: data.attributes.length + 1,
     nextQuotationId: 1,
     nextMediaId: 1,
-    nextProjectId: defaultProjectsSeed.length + 1,
+    nextProjectId: 1,
   };
 }
 

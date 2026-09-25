@@ -40,6 +40,10 @@ export type FinishedProjectItem = {
   id: string;
   name: string;
   category: "Windows" | "Doors" | "Others";
+  itemCode?: string;
+  quoteOption?: number;
+  widthM?: number;
+  heightM?: number;
   widthFt?: number;
   heightFt?: number;
   quantity?: number;
@@ -68,7 +72,7 @@ export type FinishedProject = {
   fileData?: string;
   items: FinishedProjectItem[];
   notes?: string;
-  status: "completed" | "archived" | "in_progress";
+  status: "completed" | "archived" | "in_progress" | "historical";
   createdAt: string;
   updatedAt: string;
 };

@@ -8,6 +8,10 @@ const projectItemSchema = z.object({
   id: z.string(),
   name: z.string().min(1),
   category: z.enum(["Windows", "Doors", "Others"]),
+  itemCode: z.string().optional(),
+  quoteOption: z.number().optional(),
+  widthM: z.number().optional(),
+  heightM: z.number().optional(),
   widthFt: z.number().optional(),
   heightFt: z.number().optional(),
   quantity: z.number().optional(),
@@ -36,7 +40,7 @@ const projectInputSchema = z.object({
   fileData: z.string().optional(),
   items: z.array(projectItemSchema).default([]),
   notes: z.string().optional(),
-  status: z.enum(["completed", "archived", "in_progress"]).default("completed"),
+  status: z.enum(["completed", "archived", "in_progress", "historical"]).default("historical"),
 });
 
 export async function GET() {
