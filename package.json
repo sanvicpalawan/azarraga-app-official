@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --ignore-pattern .next",
-    "verify:neon": "tsx scripts/verify-neon.ts"
+    "verify:neon": "tsx scripts/verify-neon.ts",
+    "verify:invoice": "tsx scripts/verify-invoice-parser.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

@@ -4,7 +4,7 @@
 // static images: the same generator that draws Designer Studio thumbnails
 // draws a correct schematic for any future invoice, at any size, forever.
 
-import { TEMPLATES, designToSvg, type Template } from "@/components/designer/designer-core";
+import { TEMPLATES, designToSvg, type Sym, type Template } from "@/components/designer/designer-core";
 import type { ParsedLineItem } from "./invoice-parser";
 
 function guessTemplateKey(item: ParsedLineItem): string {
@@ -48,7 +48,7 @@ function guessTemplateKey(item: ParsedLineItem): string {
 
 /** Bi-fold panel-count variants the base TEMPLATES list doesn't include yet. */
 function bifoldPanels(n: number): Template {
-  const syms = Array.from({ length: n }, (_, i) => (i % 2 === 0 ? "swingL" : "swingR")) as any;
+  const syms = Array.from({ length: n }, (_, i) => (i % 2 === 0 ? "swingL" : "swingR")) as Sym[];
   return {
     key: `bf${n}`,
     name: `Bi-fold ${n}`,
@@ -57,7 +57,7 @@ function bifoldPanels(n: number): Template {
     w: 600 * n,
     h: 2100,
     build: (w, h) =>
-      syms.map((s: any, i: number) => ({
+      syms.map((s: Sym, i: number) => ({
         id: `bf-${i}`,
         t: "rect" as const,
         x: Math.round((w * i) / n),
@@ -70,7 +70,7 @@ function bifoldPanels(n: number): Template {
 }
 
 export function iconDataUrlForItem(item: ParsedLineItem): string {
-  let key = guessTemplateKey(item);
+  const key = guessTemplateKey(item);
   const panelMatch = item.description.toLowerCase().match(/(\d+)\s*panel/);
   const panels = panelMatch ? parseInt(panelMatch[1], 10) : null;
 

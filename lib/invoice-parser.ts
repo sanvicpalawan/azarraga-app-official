@@ -64,10 +64,12 @@ async function extractRuns(buffer: Buffer): Promise<Run[][]> {
     const page = await doc.getPage(i);
     const content = await page.getTextContent();
     const runs: Run[] = [];
-    for (const item of content.items as any[]) {
+    for (const item of content.items as Array<{ str?: string; transform?: number[] }>) {
       const str = (item.str ?? "").trim();
       if (!str) continue;
-      const [, , , , x, y] = item.transform;
+      const transform = item.transform;
+      if (!transform || transform.length < 6) continue;
+      const [, , , , x, y] = transform;
       runs.push({ x, y, str });
     }
     pages.push(runs);
