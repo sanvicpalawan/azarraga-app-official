@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --ignore-pattern .next",
-    "verify:neon": "node --import tsx scripts/verify-neon.ts",
+    "verify:neon": "tsx scripts/verify-neon.ts",
+    "verify:invoice": "tsx scripts/verify-invoice-parser.ts",
     "archive:demo": "node --import tsx scripts/archive-legacy-products.ts"
   },
   "dependencies": {
@@ -28,7 +29,7 @@
     "lucide-react": "^1.31.0",
     "next": "16.3.4",
     "next-themes": "^0.4.6",
-    "pdfjs-dist": "^6.3.289",
+    "pdfjs-dist": "^4.10.38",
     "radix-ui": "^1.6.7",
     "react": "19.2.6",
     "react-day-picker": "^10.0.1",
