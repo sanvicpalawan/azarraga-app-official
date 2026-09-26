@@ -1,11 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // pdfjs-dist resolves its worker + standard-fonts files from disk at runtime
-  // (require.resolve / import.meta.url) — it must not be bundled, or those
-  // paths resolve to bundler module IDs instead of real file paths.
-  // @napi-rs/canvas is also server-side only.
-  serverExternalPackages: ["pdfjs-dist", "@napi-rs/canvas"],
+  // @napi-rs/canvas is a native binary — must not be bundled if used server-side.
+  // pdfjs-dist is intentionally NOT listed here: it needs to be bundled normally
+  // so its worker file (statically imported in lib/invoice-parser.ts) gets
+  // traced into the Vercel serverless function output.
+  serverExternalPackages: ["@napi-rs/canvas"],
 };
 
 export default nextConfig;

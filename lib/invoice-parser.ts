@@ -4,24 +4,14 @@
 // (W1, D1, AL1, SE, SR, BD1...) since descriptions wrap onto their own lines
 // above/below the code/qty/price line in this invoice template.
 
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
-import path from "path";
-import { fileURLToPath } from "url";
-
-// Resolved lazily, on first real use — not at module load — because Next's build-time
-// "collect page data" step evaluates this module in a limited environment where
-// import.meta.resolve isn't available. At actual request time (Node) it works fine.
-let pdfjsConfigured = false;
-function ensurePdfjsConfigured() {
-  if (pdfjsConfigured) return;
-  const workerUrl = import.meta.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs");
-  GlobalWorkerOptions.workerSrc = workerUrl;
-  const pdfjsPackageUrl = import.meta.resolve("pdfjs-dist/package.json");
-  const root = path.dirname(fileURLToPath(pdfjsPackageUrl));
-  standardFontDataUrl = "file://" + path.join(root, "standard_fonts") + "/";
-  pdfjsConfigured = true;
-}
-let standardFontDataUrl = "";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+// Static import (not a dynamically-resolved path) so Vercel's serverless file
+// tracer always bundles the worker. pdfjs detects it's already loaded in this
+// process and runs it as a "fake worker" in-thread — no real Worker needed.
+// (A dynamic import.meta.resolve()/require.resolve() path here works locally
+// but can be silently dropped by the production bundle — that was the actual
+// cause of the "Could not analyze the invoice file" runtime failures.)
+import "pdfjs-dist/legacy/build/pdf.worker.mjs";
 
 export interface ParsedLineItem {
   itemCode: string | null;
@@ -50,13 +40,11 @@ export interface ParsedInvoice {
 type Run = { x: number; y: number; str: string };
 
 async function extractRuns(buffer: Buffer): Promise<Run[][]> {
-  ensurePdfjsConfigured();
   const data = new Uint8Array(buffer);
   const doc = await getDocument({
     data,
-    standardFontDataUrl,
     disableFontFace: true,
-    useSystemFonts: false,
+    useSystemFonts: true,
     isEvalSupported: false,
   }).promise;
   const pages: Run[][] = [];
