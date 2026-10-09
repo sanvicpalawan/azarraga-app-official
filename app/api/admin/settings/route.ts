@@ -14,8 +14,9 @@ const schema = z.object({
   bankAccountNumber: z.string().trim().max(120),
   bankName: z.string().trim().max(120),
   bankBranch: z.string().trim().max(120),
-  termsConditions: z.string().trim().min(1).max(2000),
-  pdfHeader: z.string().trim().min(1).max(180),
+  termsConditions: z.string().trim().max(2000).optional().default(""),
+  pdfHeader: z.string().trim().max(180).optional().default(""),
+  defaultLeadTime: z.string().trim().max(60).optional().default("30-45"),
 });
 
 export async function GET() {

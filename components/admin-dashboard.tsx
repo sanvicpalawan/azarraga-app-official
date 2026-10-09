@@ -251,7 +251,8 @@ export function AdminDashboard({ catalog, refresh, mode }: Props) {
       <div className="settings-form">
         {([[
           "Company Name", "companyName"], ["Email", "email"], ["Contact Numbers", "contactNumbers"], ["TIN", "tin"], ["Company Address", "address"], ["PDF Header", "pdfHeader"], ["Account Name", "bankAccountName"], ["Account Number", "bankAccountNumber"], ["Bank Name", "bankName"], ["Bank Branch", "bankBranch"]] as const).map(([label, key]) => <div className="field-stack" key={key}><Label>{label}</Label><Input value={settings[key]} onChange={(event) => setSettings((value) => ({ ...value, [key]: event.target.value }))} /></div>)}
-        <div className="field-stack full-span"><Label>Terms & Conditions</Label><Textarea value={settings.termsConditions} onChange={(event) => setSettings((value) => ({ ...value, termsConditions: event.target.value }))} /></div>
+        <div className="field-stack"><Label>Default Lead Time (working days)</Label><Input value={settings.defaultLeadTime} placeholder="30-45" onChange={(event) => setSettings((value) => ({ ...value, defaultLeadTime: event.target.value }))} /></div>
+        <div className="field-stack full-span"><Label>Terms &amp; Conditions <small>(optional — printed after the payment terms block)</small></Label><Textarea value={settings.termsConditions} onChange={(event) => setSettings((value) => ({ ...value, termsConditions: event.target.value }))} /></div>
         <Button className="full-span" onClick={saveSettings}><Save /> Save Company Profile</Button>
       </div>
     </div>}

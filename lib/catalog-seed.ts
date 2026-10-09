@@ -24,6 +24,7 @@ export function buildDefaultCatalogData(now: string): {
       bankBranch: "",
       termsConditions: "",
       pdfHeader: "AZARRAGA GLASS & ALUMINUM — QUOTATION",
+      defaultLeadTime: "30-45",
       updatedAt: now,
     },
     categories: ["Windows", "Doors", "Others"].map((name, index) => ({

@@ -147,6 +147,7 @@ export function buildDefaultCatalogData(now: string): DefaultCatalogData {
       bankBranch: "",
       termsConditions: defaultTerms,
       pdfHeader: "AZARRAGA GLASS & ALUMINUM — QUOTATION",
+      defaultLeadTime: "30-45",
       updatedAt: now,
     },
     categories,

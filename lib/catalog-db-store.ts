@@ -56,6 +56,7 @@ function mapSettings(row: Row): Settings {
     bankBranch: str(row.bank_branch),
     termsConditions: str(row.terms_conditions),
     pdfHeader: str(row.pdf_header),
+    defaultLeadTime: str(row.default_lead_time) || "30-45",
     updatedAt: iso(row.updated_at),
   };
 }
@@ -185,9 +186,11 @@ function mapQuotation(row: Row): Quotation {
     projectName: str(row.project_name),
     projectAddress: str(row.project_address),
     subtotal: num(row.subtotal),
+    delivery: num(row.delivery),
     discount: num(row.discount),
     grandTotal: num(row.grand_total),
     totalSqft: num(row.total_sqft),
+    leadTime: str(row.lead_time),
     item,
     items,
     id: num(row.id),
@@ -291,6 +294,7 @@ function createDbBackend(): CatalogBackend {
           bank_branch = ${input.bankBranch},
           terms_conditions = ${input.termsConditions},
           pdf_header = ${input.pdfHeader},
+          default_lead_time = ${input.defaultLeadTime || "30-45"},
           updated_at = now()
         where id = 1`;
       return getSettingsDirect(db);
@@ -572,11 +576,13 @@ function createDbBackend(): CatalogBackend {
       const [row] = await db`
         insert into quotations (
           quotation_number, customer_name, project_name, project_address,
-          subtotal, discount, grand_total, total_sqft, item, status, updated_at
+          subtotal, delivery, discount, grand_total, total_sqft, lead_time,
+          item, status, updated_at
         ) values (
           ${input.quotationNumber}, ${input.customerName}, ${input.projectName},
-          ${input.projectAddress}, ${input.subtotal}, ${input.discount},
-          ${input.grandTotal}, ${input.totalSqft}, ${JSON.stringify(input.items?.length ? input.items : [input.item])},
+          ${input.projectAddress}, ${input.subtotal}, ${input.delivery ?? 0},
+          ${input.discount}, ${input.grandTotal}, ${input.totalSqft},
+          ${input.leadTime ?? ""}, ${JSON.stringify(input.items?.length ? input.items : [input.item])},
           'draft', now()
         )
         on conflict (quotation_number) do update set
@@ -584,9 +590,11 @@ function createDbBackend(): CatalogBackend {
           project_name = excluded.project_name,
           project_address = excluded.project_address,
           subtotal = excluded.subtotal,
+          delivery = excluded.delivery,
           discount = excluded.discount,
           grand_total = excluded.grand_total,
           total_sqft = excluded.total_sqft,
+          lead_time = excluded.lead_time,
           item = excluded.item,
           updated_at = now()
         returning *`;

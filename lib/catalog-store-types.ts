@@ -37,10 +37,17 @@ export type QuotationItem = {
   imageUrl?: string | null;
   width: number;
   height: number;
+  /** Size in metres, kept alongside feet so printed descriptions never drift. */
+  widthM?: number;
+  heightM?: number;
   quantity: number;
   sqft: number;
   rate: number;
   pricingMethod: "sqft" | "unit";
+  /** Printed in the ITEM# column: W1, D1, AL1, BD1, SE, SR… */
+  itemCode?: string;
+  /** Printed in the UNIT column: set, sets, LM. */
+  unit?: string;
   sectionCompany: string;
   sectionType: string;
   glass: string;
@@ -57,9 +64,13 @@ export type QuotationInput = {
   projectName: string;
   projectAddress: string;
   subtotal: number;
+  /** Delivery / installation charge printed between Sub Total and Total. */
+  delivery?: number;
   discount: number;
   grandTotal: number;
   totalSqft: number;
+  /** e.g. "30-45", injected into the payment terms block. */
+  leadTime?: string;
   item: QuotationItem;
   items?: QuotationItem[];
 };

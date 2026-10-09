@@ -1,0 +1,921 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowLeft,
+  Building2,
+  Check,
+  ChevronRight,
+  Download,
+  FileText,
+  FolderArchive,
+  ImageIcon,
+  LayoutGrid,
+  PackagePlus,
+  Printer,
+  Save,
+  Search,
+  Settings2,
+} from "lucide-react";
+import { AdminDashboard } from "@/components/admin-dashboard";
+import { FinishedProjectsScreen } from "@/components/finished-projects";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import type { Attribute, Catalog, Product } from "@/lib/catalog-types";
+import type { QuotationItem } from "@/lib/catalog-store-types";
+import { QuotationDocument, type QuoteLine } from "@/components/quotation-document";
+import {
+  computeItemCodes,
+  computeQuoteTotals,
+  deriveUnit,
+  feetToMetre,
+  itemCodePrefix,
+  quantityAndUnitCost,
+} from "@/lib/quote-format";
+
+type Screen = "catalog" | "configure" | "preview" | "projects" | "library" | "admin";
+const money = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 2 });
+
+function ProductPicture({ product, className = "" }: { product: Product; className?: string }) {
+  return (
+    <div className={`product-picture ${className}`}>
+      {product.imageUrl ? (
+        <img src={product.imageUrl} alt={`${product.name} product pattern`} />
+      ) : (
+        <>
+          <ImageIcon />
+          <span>Image coming soon</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ChoiceField({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: Attribute[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="field-stack">
+      <Label>{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="app-select">
+          <SelectValue placeholder={`Choose ${label.toLowerCase()}`} />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((item) => (
+            <SelectItem key={item.id} value={item.name}>
+              {item.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+export default function Home() {
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
+  const [loadError, setLoadError] = useState("");
+  const [screen, setScreen] = useState<Screen>("catalog");
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [search, setSearch] = useState("");
+  const [product, setProduct] = useState<Product | null>(null);
+  const [quoteLines, setQuoteLines] = useState<QuoteLine[]>([]);
+  const [editingLineId, setEditingLineId] = useState<string | null>(null);
+  const [quotationNumber, setQuotationNumber] = useState("");
+  const [width, setWidth] = useState("8"),
+    [height, setHeight] = useState("5"),
+    [quantity, setQuantity] = useState("1"),
+    [rate, setRate] = useState("0"),
+    [discount, setDiscount] = useState("0"),
+    [delivery, setDelivery] = useState("0");
+  const [pricingMethod, setPricingMethod] = useState<"sqft" | "unit">("sqft");
+  const [series, setSeries] = useState(""),
+    [glass, setGlass] = useState(""),
+    [color, setColor] = useState(""),
+    [lock, setLock] = useState("");
+  const [location, setLocation] = useState(""),
+    [description, setDescription] = useState("");
+  const [customerName, setCustomerName] = useState(""),
+    [projectName, setProjectName] = useState(""),
+    [projectAddress, setProjectAddress] = useState("");
+  const [leadTime, setLeadTime] = useState("");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  const refresh = async () => {
+    const response = await fetch("/api/catalog", { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Catalog unavailable.");
+    setCatalog(data);
+    if (product) {
+      const updated = data.products.find((item: Product) => item.id === product.id);
+      if (updated) setProduct(updated);
+      else {
+        setProduct(null);
+        setScreen((current) => (current === "configure" || current === "preview" ? "catalog" : current));
+      }
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    const loadCatalog = async () => {
+      try {
+        const response = await fetch("/api/catalog", { cache: "no-store" });
+        const data = (await response.json()) as Catalog & { error?: string };
+        if (!response.ok) throw new Error(data.error || "Catalog unavailable.");
+        if (active) {
+          setCatalog(data);
+          setLeadTime(data.settings?.defaultLeadTime || "30-45");
+        }
+      } catch (error) {
+        if (active) setLoadError(error instanceof Error ? error.message : "Catalog unavailable.");
+      }
+    };
+    void loadCatalog();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const grouped = useMemo(
+    () => ({
+      series: catalog?.attributes.filter((item) => item.type === "series") || [],
+      glass: catalog?.attributes.filter((item) => item.type === "glass") || [],
+      color: catalog?.attributes.filter((item) => item.type === "color") || [],
+      lock: catalog?.attributes.filter((item) => item.type === "lock") || [],
+    }),
+    [catalog],
+  );
+
+  const itemTotals = useMemo(() => {
+    const w = Number(width) || 0,
+      h = Number(height) || 0,
+      qty = Math.max(0, Number(quantity) || 0),
+      itemRate = Number(rate) || 0;
+    const areaEach = w * h,
+      totalArea = areaEach * qty,
+      subtotal = pricingMethod === "sqft" ? totalArea * itemRate : qty * itemRate;
+    return { areaEach, totalArea, subtotal };
+  }, [width, height, quantity, rate, pricingMethod]);
+  const totals = useMemo(
+    () =>
+      computeQuoteTotals(
+        quoteLines.map((line) => line.item),
+        Number(delivery) || 0,
+        Number(discount) || 0,
+      ),
+    [quoteLines, delivery, discount],
+  );
+
+  // ITEM# codes restart per prefix inside a quote (AL1…AL5 + W1…W6), so they
+  // are recomputed from the live line list every time a line changes.
+  const codedLines = useMemo<QuoteLine[]>(() => {
+    const codes = computeItemCodes(
+      quoteLines.map((line) => ({
+        name: line.item.productName,
+        category: line.product.categoryName,
+      })),
+    );
+    return quoteLines.map((line, index) => {
+      const prefix = itemCodePrefix(line.item.productName, line.product.categoryName);
+      const { qty } = quantityAndUnitCost(line.item, prefix);
+      return {
+        ...line,
+        item: { ...line.item, itemCode: codes[index], unit: deriveUnit(prefix, qty) },
+      };
+    });
+  }, [quoteLines]);
+
+  const visibleProducts = useMemo(
+    () =>
+      catalog?.products
+        .filter(
+          (item) =>
+            (selectedCategory === "All" || item.categoryName === selectedCategory) &&
+            `${item.name} ${item.description}`.toLowerCase().includes(search.toLowerCase()),
+        )
+        .sort((a, b) => Number(b.isCustom) - Number(a.isCustom)) || [],
+    [catalog, selectedCategory, search],
+  );
+  const [selectedInvoiceSizes, setSelectedInvoiceSizes] = useState<Record<string, number>>({});
+  const visibleProductFamilies = useMemo(() => {
+    const groups = new Map<string, Product[]>();
+    for (const item of visibleProducts) {
+      const family = item.description.includes("Historical price")
+        ? item.name.replace(/\s*—\s*\d+(?:\.\d+)?\s*×\s*\d+(?:\.\d+)?\s*m$/, "")
+        : `product-${item.id}`;
+      groups.set(family, [...(groups.get(family) || []), item]);
+    }
+    return [...groups.entries()].map(([family, variants]) => ({ family, variants }));
+  }, [visibleProducts]);
+
+  const chooseProduct = (item: Product) => {
+    setEditingLineId(null);
+    setProduct(item);
+    setWidth("8");
+    setHeight("5");
+    setQuantity("1");
+    setPricingMethod("sqft");
+    setLocation("");
+    setRate(String(item.basePrice || 0));
+    if (item.description.includes("Historical price")) {
+      setPricingMethod("unit");
+      const dimensions = item.name.match(/—\s*(\d+(?:\.\d+)?)\s*×\s*(\d+(?:\.\d+)?)\s*m$/);
+      if (dimensions) {
+        setWidth(String(+(Number(dimensions[1])*3.28084).toFixed(4)));
+        setHeight(String(+(Number(dimensions[2])*3.28084).toFixed(4)));
+      }
+    }
+    setSeries(item.defaultSeries || grouped.series[0]?.name || "");
+    setGlass(item.defaultGlass || grouped.glass[0]?.name || "");
+    setColor(grouped.color[0]?.name || "");
+    setLock(grouped.lock[0]?.name || "");
+    setDescription(item.description);
+    setScreen("configure");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const canPreview = Boolean(
+    product && Number(width) > 0 && Number(height) > 0 && Number(quantity) > 0 && Number(rate) >= 0,
+  );
+
+  const addCurrentLine = (destination: "catalog" | "preview") => {
+    if (!product || !canPreview) return;
+    const item: QuotationItem = {
+      productName:product.name, productId:product.id===99999?null:product.id,
+      imageUrl:product.imageUrl,width:Number(width),height:Number(height),
+      widthM:feetToMetre(width),heightM:feetToMetre(height),
+      quantity:Math.max(1,Math.round(Number(quantity))),sqft:itemTotals.totalArea,
+      rate:Number(rate),pricingMethod,itemCode:"",unit:"",
+      sectionCompany:"Analok",sectionType:series||"N/A",
+      glass:glass||"N/A",color:color||"N/A",lock:lock||"N/A",
+      location,description,total:itemTotals.subtotal,
+    };
+    const id=editingLineId||crypto.randomUUID();
+    setQuoteLines(lines=>editingLineId
+      ? lines.map(line=>line.id===id?{id,product,item}:line)
+      : [...lines,{id,product,item}]);
+    setEditingLineId(null);
+    setSaveStatus("idle");
+    setScreen(destination);
+    window.scrollTo({top:0,behavior:"smooth"});
+  };
+
+  const editLine = (line: QuoteLine) => {
+    const {item}=line;
+    setProduct(line.product);
+    setEditingLineId(line.id);
+    setWidth(String(item.width));setHeight(String(item.height));
+    setQuantity(String(item.quantity));setRate(String(item.rate));
+    setPricingMethod(item.pricingMethod);
+    setSeries(item.sectionType);setGlass(item.glass);setColor(item.color);setLock(item.lock);
+    setLocation(item.location);setDescription(item.description);
+    setScreen("configure");
+  };
+
+  const removeLine = (id: string) => {
+    setQuoteLines(lines => lines.filter(line => line.id !== id));
+    setSaveStatus("idle");
+    if (quoteLines.length === 1) setScreen("catalog");
+  };
+
+  const startNewQuote = () => {
+    setQuoteLines([]);setEditingLineId(null);setQuotationNumber("");setProduct(null);
+    setCustomerName("");setProjectName("");setProjectAddress("");setDiscount("0");
+    setDelivery("0");setLeadTime(catalog?.settings.defaultLeadTime || "30-45");
+    setSaveStatus("idle");setScreen("catalog");
+  };
+
+  const saveDraft = async () => {
+    if (!codedLines.length) return;
+    setSaveStatus("saving");
+    try {
+      const number=quotationNumber || `Q-${new Date().getFullYear()}-${Date.now()}`;
+      const response = await fetch("/api/quotations", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          quotationNumber: number,
+          customerName: customerName || "Walk-in Customer",
+          projectName: projectName || "New Project",
+          projectAddress,
+          subtotal: totals.subtotal,
+          delivery: totals.delivery,
+          discount: totals.discount,
+          grandTotal: totals.grandTotal,
+          totalSqft: totals.totalArea,
+          leadTime,
+          item:codedLines[0].item,
+          items:codedLines.map(line=>line.item),
+        }),
+      });
+      if (!response.ok) throw new Error();
+      setQuotationNumber(number);
+      setSaveStatus("saved");
+    } catch {
+      setSaveStatus("error");
+    }
+  };
+
+  if (!catalog)
+    return (
+      <main className="loading-screen">
+        <Building2 />
+        {loadError ? (
+          <>
+            <h1>Catalog unavailable</h1>
+            <p>{loadError}</p>
+            <Button onClick={() => window.location.reload()}>Try again</Button>
+          </>
+        ) : (
+          <>
+            <h1>Azarraga Quotations</h1>
+            <p>Loading products…</p>
+          </>
+        )}
+      </main>
+    );
+
+  const settings = catalog.settings;
+  const companyLogoSrc = settings.logoKey ? "/api/admin/settings/logo" : "/azarraga-logo-full.jpg";
+  const companyMarkSrc = settings.logoKey ? "/api/admin/settings/logo" : "/azarraga-logo-mark.jpg";
+  const quoteDate = new Intl.DateTimeFormat("en-PH", { dateStyle: "long" }).format(new Date());
+
+  return (
+    <main className="app-shell">
+      <aside className="side-rail no-print">
+        <div className="brand-lockup compact-brand">
+          <span className="brand-mark">
+            <img src={companyMarkSrc} alt="Azarraga logo" />
+          </span>
+          <span>
+            <strong>AZARRAGA</strong>
+            <small>GLASS & ALUMINUM</small>
+          </span>
+        </div>
+        <nav aria-label="App sections">
+          <button
+            className={`rail-link ${["catalog","configure","preview"].includes(screen) ? "active" : ""}`}
+            onClick={() => setScreen("catalog")}
+          >
+            <LayoutGrid />
+            New Quote
+          </button>
+          <button
+            className={`rail-link ${screen === "projects" ? "active" : ""}`}
+            onClick={() => setScreen("projects")}
+          >
+            <FolderArchive />
+            Projects & Prices
+          </button>
+          <button
+            className={`rail-link ${screen === "library" ? "active" : ""}`}
+            onClick={() => setScreen("library")}
+          >
+            <PackagePlus />
+            Product Library
+          </button>
+          <button
+            className={`rail-link ${screen === "admin" ? "active" : ""}`}
+            onClick={() => setScreen("admin")}
+          >
+            <Settings2 />
+            Settings
+          </button>
+        </nav>
+        <div className="rail-help">
+          <strong>Simple workflow</strong>
+          <span>Product → Size & Price → Quote</span>
+        </div>
+      </aside>
+
+      <section className="workspace">
+        <header className="app-header no-print">
+          <div className="mobile-brand brand-lockup">
+            <span className="brand-mark">
+              <img src={companyMarkSrc} alt="Azarraga logo" />
+            </span>
+            <span>
+              <strong>AZARRAGA</strong>
+              <small>GLASS & ALUMINUM</small>
+            </span>
+          </div>
+          <div className="title-block">
+            <div>
+              <p>
+                {screen === "admin" ? "Company profile and options" : screen === "library" ? "Products, images, and custom designs" : screen === "projects" ? "Saved quotes and imported PDFs" : "Create a quotation"}
+              </p>
+              <h1>
+                {screen === "catalog"
+                  ? "New Quote · Choose Product"
+                  : screen === "configure"
+                  ? "Configure Product"
+                  : screen === "preview"
+                  ? "Quote & Invoice"
+                  : screen === "projects"
+                  ? "Projects & Prices"
+                  : screen === "library"
+                  ? "Product Library"
+                  : "Settings"}
+              </h1>
+            </div>
+          </div>
+          {screen !== "catalog" &&
+            screen !== "admin" &&
+            screen !== "library" &&
+            screen !== "projects" && (
+              <div className="header-actions">
+                <Button
+                  variant="outline"
+                  onClick={() => setScreen("catalog")}
+                >
+                  <ArrowLeft />
+                  Back
+                </Button>
+                {screen === "configure" && (
+                  <Button disabled={!canPreview} onClick={() => addCurrentLine("preview")}>
+                    Review Quote
+                    <ChevronRight />
+                  </Button>
+                )}
+                {screen === "preview" && (
+                  <Button onClick={() => window.print()}>
+                    <Download />
+                    Download PDF
+                  </Button>
+                )}
+              </div>
+            )}
+        </header>
+
+        <nav className="mobile-nav no-print" aria-label="Mobile navigation">
+          <button
+            className={["catalog","configure","preview"].includes(screen) ? "active" : ""}
+            onClick={() => setScreen("catalog")}
+          >
+            <LayoutGrid />
+            New Quote
+          </button>
+          <button
+            className={screen === "projects" ? "active" : ""}
+            onClick={() => setScreen("projects")}
+          >
+            <FolderArchive />
+            Projects
+          </button>
+          <button
+            className={screen === "library" ? "active" : ""}
+            onClick={() => setScreen("library")}
+          >
+            <PackagePlus />
+            Library
+          </button>
+          <button
+            className={screen === "admin" ? "active" : ""}
+            onClick={() => setScreen("admin")}
+          >
+            <Settings2 />
+            Settings
+          </button>
+        </nav>
+
+        {screen === "catalog" && (
+          <section className="catalog-page">
+            <div className="catalog-tools">
+              <div className="search-box">
+                <Search />
+                <Input
+                  aria-label="Search products"
+                  placeholder="Search windows, doors, glass…"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </div>
+              <div className="category-tabs">
+                <button
+                  className={selectedCategory === "All" ? "active" : ""}
+                  onClick={() => setSelectedCategory("All")}
+                >
+                  All
+                </button>
+                {catalog.categories.map((category) => (
+                  <button
+                    className={selectedCategory === category.name ? "active" : ""}
+                    key={category.id}
+                    onClick={() => setSelectedCategory(category.name)}
+                  >
+                    {category.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="catalog-summary">
+              <div>
+                <strong>{visibleProductFamilies.length} product families</strong>
+                <span>Select a size when available, then check the price before quoting.</span>
+              </div>
+            </div>
+            {quoteLines.length > 0 && <div className="admin-card no-print">
+              <strong>Current quote: {quoteLines.length} item(s) · {money.format(totals.grandTotal)}</strong>
+              <div className="quote-control-actions">
+                <Button onClick={() => setScreen("preview")}>Review quote</Button>
+                <Button variant="outline" onClick={startNewQuote}>Start a new quote</Button>
+              </div>
+            </div>}
+            <div className="product-grid">
+              {visibleProductFamilies.map(({family,variants}) => {
+                const item = variants.find(p=>p.id===selectedInvoiceSizes[family]) || variants[0];
+                return (
+                <div key={family}>
+                {variants.length > 1 && (
+                  <label style={{display:"block",marginBottom:8}}>
+                    <span style={{display:"block",fontSize:12}}>Select size · {family}</span>
+                    <select aria-label={`Size for ${family}`} value={item.id} onChange={event=>setSelectedInvoiceSizes(previous=>({...previous,[family]:Number(event.target.value)}))}>
+                      {variants.map(variant=><option key={variant.id} value={variant.id}>{variant.name.replace(family,"").replace(/^\s*—\s*/,"")}</option>)}
+                    </select>
+                  </label>
+                )}
+                <button
+                  className="product-card"
+                  onClick={() => chooseProduct(item)}
+                >
+                  <ProductPicture product={item} />
+                  <span className="product-category">
+                    {item.isCustom
+                      ? `OWNER DESIGN · ${item.productKey || "CUSTOM"}`
+                      : item.categoryName}
+                  </span>
+                  <h2>{item.name}</h2>
+                  <p>{item.description || "Custom fabrication and installation."}</p>
+                  <div>
+                    <strong>
+                      {item.basePrice > 0
+                        ? item.description.includes("Historical price") ? `${money.format(item.basePrice)} historical unit price` : `${money.format(item.basePrice)} base rate`
+                        : "Set price in quote"}
+                    </strong>
+                    <span>
+                      Configure <ChevronRight />
+                    </span>
+                  </div>
+                </button>
+                </div>
+              );})}
+            </div>
+            {!visibleProducts.length && (
+              <div className="empty-state">
+                <Search />
+                <h2>No matching products</h2>
+                <p>Import a past invoice to build your real catalog, or add a product in Product Library.</p>
+                <div className="quote-control-actions">
+                  <Button onClick={() => setScreen("projects")}>Import an invoice</Button>
+                  <Button variant="outline" onClick={() => setScreen("library")}>Add a product</Button>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {screen === "configure" && product && (
+          <section className="configure-flow">
+            <div className="flow-steps no-print">
+              <span className="done">
+                <Check />
+                Product
+              </span>
+              <i />
+              <span className="active">2</span>
+              <strong>Configure</strong>
+              <i />
+              <span>3</span>
+              <strong>Quote</strong>
+            </div>
+            <div className="configure-layout">
+              <section className="configure-main">
+                <div className="selected-product-card">
+                  <ProductPicture product={product} />
+                  <div>
+                    <span className="eyebrow">{product.categoryName}</span>
+                    <h2>{product.name}</h2>
+                    <p>{product.description}</p>
+                    <Button variant="outline" onClick={() => setScreen("catalog")}>
+                      Change product
+                    </Button>
+                  </div>
+                </div>
+                <div className="form-card">
+                  <div className="form-section-title full-span">
+                    <span>1</span>
+                    <div>
+                      <h3>Size and price</h3>
+                      <p>Enter measurements in feet. Totals update instantly.</p>
+                    </div>
+                  </div>
+                  <div className="field-stack">
+                    <Label htmlFor="width">Width (ft) *</Label>
+                    <Input
+                      id="width"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={width}
+                      onChange={(event) => setWidth(event.target.value)}
+                    />
+                  </div>
+                  <div className="field-stack">
+                    <Label htmlFor="height">Height (ft) *</Label>
+                    <Input
+                      id="height"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={height}
+                      onChange={(event) => setHeight(event.target.value)}
+                    />
+                  </div>
+                  <div className="field-stack">
+                    <Label htmlFor="quantity">Quantity *</Label>
+                    <Input
+                      id="quantity"
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={quantity}
+                      onChange={(event) => setQuantity(event.target.value)}
+                    />
+                  </div>
+                  <div className="field-stack">
+                    <Label htmlFor="rate">Rate *</Label>
+                    <Input
+                      id="rate"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={rate}
+                      onChange={(event) => setRate(event.target.value)}
+                    />
+                  </div>
+                  <fieldset className="pricing-method full-span">
+                    <legend>Pricing method</legend>
+                    <RadioGroup
+                      value={pricingMethod}
+                      onValueChange={(value) => setPricingMethod(value as "sqft" | "unit")}
+                      className="pricing-options"
+                    >
+                      <Label
+                        className={
+                          pricingMethod === "sqft"
+                            ? "pricing-choice active"
+                            : "pricing-choice"
+                        }
+                      >
+                        <RadioGroupItem value="sqft" />
+                        Per sq. ft.
+                        <small>Windows and glass work</small>
+                      </Label>
+                      <Label
+                        className={
+                          pricingMethod === "unit"
+                            ? "pricing-choice active"
+                            : "pricing-choice"
+                        }
+                      >
+                        <RadioGroupItem value="unit" />
+                        Per unit / set
+                        <small>ED doors and fixed-price items</small>
+                      </Label>
+                    </RadioGroup>
+                  </fieldset>
+                  <div className="form-section-title full-span">
+                    <span>2</span>
+                    <div>
+                      <h3>Product details</h3>
+                      <p>Choose the materials that will appear on the invoice.</p>
+                    </div>
+                  </div>
+                  <ChoiceField
+                    label="Series"
+                    value={series}
+                    options={grouped.series}
+                    onChange={setSeries}
+                  />
+                  <ChoiceField
+                    label="Glass"
+                    value={glass}
+                    options={grouped.glass}
+                    onChange={setGlass}
+                  />
+                  <ChoiceField
+                    label="Color"
+                    value={color}
+                    options={grouped.color}
+                    onChange={setColor}
+                  />
+                  <ChoiceField
+                    label="Lock"
+                    value={lock}
+                    options={grouped.lock}
+                    onChange={setLock}
+                  />
+                  <div className="field-stack">
+                    <Label htmlFor="location">Location</Label>
+                    <Input
+                      id="location"
+                      placeholder="e.g. Living room"
+                      value={location}
+                      onChange={(event) => setLocation(event.target.value)}
+                    />
+                  </div>
+                  <div className="field-stack full-span">
+                    <Label htmlFor="description">Description / special instructions</Label>
+                    <Textarea
+                      id="description"
+                      value={description}
+                      onChange={(event) => setDescription(event.target.value)}
+                    />
+                  </div>
+                </div>
+              </section>
+              <aside className="price-sidebar">
+                <span>Live total</span>
+                <div>
+                  <small>
+                    {width || 0} × {height || 0} ft × {quantity || 0}
+                  </small>
+                  <strong>{itemTotals.totalArea.toFixed(2)} sq. ft.</strong>
+                </div>
+                <div>
+                  <small>
+                    {pricingMethod === "sqft" ? "Rate per sq. ft." : "Rate per unit / set"}
+                  </small>
+                  <strong>{money.format(Number(rate) || 0)}</strong>
+                </div>
+                <div className="price-total">
+                  <small>Item total</small>
+                  <strong>{money.format(itemTotals.subtotal)}</strong>
+                </div>
+                <Button disabled={!canPreview} onClick={() => addCurrentLine("preview")}>
+                  {editingLineId ? "Update item & review quote" : "Add item & review quote"} <ChevronRight />
+                </Button>
+                <Button variant="outline" disabled={!canPreview} onClick={() => addCurrentLine("catalog")}>
+                  {editingLineId ? "Update item & choose another" : "Add item & choose another"}
+                </Button>
+                {quoteLines.length > 0 && <small>{quoteLines.length} item(s) already in this quote</small>}
+                <p>Nothing is final until you save the quotation.</p>
+              </aside>
+            </div>
+          </section>
+        )}
+
+        {screen === "preview" && quoteLines.length > 0 && (
+          <section className="quote-workspace">
+            <div className="quote-controls no-print">
+              <div className="customer-form">
+                <div className="form-section-title">
+                  <span>3</span>
+                  <div>
+                    <h3>Customer and project</h3>
+                    <p>Add the recipient details before downloading.</p>
+                  </div>
+                </div>
+                <div className="customer-fields">
+                  <div className="field-stack">
+                    <Label>Customer Name</Label>
+                    <Input
+                      value={customerName}
+                      onChange={(event) => setCustomerName(event.target.value)}
+                      placeholder="Customer name"
+                    />
+                  </div>
+                  <div className="field-stack">
+                    <Label>Project Name</Label>
+                    <Input
+                      value={projectName}
+                      onChange={(event) => setProjectName(event.target.value)}
+                      placeholder="Project name"
+                    />
+                  </div>
+                  <div className="field-stack full-span">
+                    <Label>Project Address</Label>
+                    <Input
+                      value={projectAddress}
+                      onChange={(event) => setProjectAddress(event.target.value)}
+                      placeholder="Project address"
+                    />
+                  </div>
+                </div>
+                <div className="quote-control-actions">
+                  <Button variant="outline" onClick={() => setScreen("catalog")}>Add another product</Button>
+                  <Button
+                    variant="outline"
+                    onClick={saveDraft}
+                    disabled={saveStatus === "saving"}
+                  >
+                    <Save />
+                    {saveStatus === "saving"
+                      ? "Saving…"
+                      : saveStatus === "saved"
+                      ? "Draft saved"
+                      : "Save draft"}
+                  </Button>
+                  <Button onClick={() => window.print()}>
+                    <Printer />
+                    Print / Save PDF
+                  </Button>
+                  <Button variant="outline" onClick={startNewQuote}>Start new quote</Button>
+                </div>
+                {saveStatus === "error" && (
+                  <p className="error-text">
+                    The draft could not be saved. Your entries are still on this screen.
+                  </p>
+                )}
+              </div>
+            </div>
+            <QuotationDocument
+              settings={settings}
+              logoSrc={companyLogoSrc}
+              lines={codedLines}
+              quotationNumber={quotationNumber}
+              quoteDate={quoteDate}
+              customerName={customerName}
+              projectName={projectName}
+              projectAddress={projectAddress}
+              delivery={delivery}
+              discount={discount}
+              leadTime={leadTime}
+              onDeliveryChange={setDelivery}
+              onDiscountChange={setDiscount}
+              onLeadTimeChange={setLeadTime}
+              onEditLine={editLine}
+              onRemoveLine={removeLine}
+            />
+          </section>
+        )}
+
+        {screen === "projects" && (
+          <FinishedProjectsScreen
+            onCatalogUpdated={refresh}
+            onUseInConfigure={(configuredItem) => {
+              setEditingLineId(null);
+              const matchingProduct = catalog.products.find(
+                (p) => p.name.toLowerCase() === configuredItem.productName.toLowerCase(),
+              );
+              if (matchingProduct) {
+                chooseProduct(matchingProduct);
+              } else {
+                const transientProduct: Product = {
+                  id: 99999,
+                  name: configuredItem.productName,
+                  categoryId: configuredItem.category === "Doors" ? 2 : 1,
+                  categoryName: configuredItem.category,
+                  basePrice: configuredItem.rate,
+                  description: configuredItem.description || "",
+                  defaultSeriesId: null,
+                  defaultGlassId: null,
+                  defaultSeries: configuredItem.series || null,
+                  defaultGlass: configuredItem.glass || null,
+                  imageKey: null,
+                  imagePath: configuredItem.imageUrl || null,
+                  imageUrl: configuredItem.imageUrl || null,
+                  productKey: "FINISHED-EXT",
+                  designId: null,
+                  isCustom: true,
+                  updatedAt: new Date().toISOString(),
+                };
+                setProduct(transientProduct);
+              }
+              setWidth(String(configuredItem.width || 8));
+              setHeight(String(configuredItem.height || 5));
+              setRate(String(configuredItem.rate || 0));
+              setPricingMethod("unit");
+              if (configuredItem.series) setSeries(configuredItem.series);
+              if (configuredItem.glass) setGlass(configuredItem.glass);
+              if (configuredItem.color) setColor(configuredItem.color);
+              if (configuredItem.lock) setLock(configuredItem.lock);
+              if (configuredItem.description) setDescription(configuredItem.description);
+              setScreen("configure");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          />
+        )}
+
+        {(screen === "library" || screen === "admin") && (
+          <AdminDashboard key={screen} mode={screen === "library" ? "library" : "settings"} catalog={catalog} refresh={refresh} />
+        )}
+      </section>
+    </main>
+  );
+}

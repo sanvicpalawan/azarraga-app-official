@@ -33,6 +33,8 @@ export type Settings = {
   bankBranch: string;
   termsConditions: string;
   pdfHeader: string;
+  /** Default lead-time phrase printed in the payment terms block, e.g. "30-45". */
+  defaultLeadTime: string;
   updatedAt: string;
 };
 
