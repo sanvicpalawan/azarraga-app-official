@@ -445,9 +445,9 @@ export default function DesignerScreen({ store = apiStore, initial, onUseInQuote
 }
 
 const CSS = `
-.dz{--blue:#0F4C81;--ink:#082a47;--paper:#f3f1ea;--card:#fff;--rule:rgba(8,42,71,.18);--mute:#5a6b7c;
- font-family:'Hanken Grotesk','Helvetica Neue',Arial,sans-serif;color:var(--ink);background:var(--paper);min-height:100%;box-sizing:border-box}
-.dz-in{padding:14px;max-width:1500px;margin:0 auto}
+.dz{--blue:#0F4C81;--ink:#14263d;--paper:#f4f7fb;--card:#fff;--rule:#d7e1ec;--mute:#607188;
+ font-family:var(--font-sans);color:var(--ink);background:var(--paper);box-sizing:border-box;min-width:0}
+.dz-in{padding:0;max-width:1500px;margin:0 auto}
 .dz *{box-sizing:border-box}
 .dz button{font:inherit;cursor:pointer}
 .dz-brand{background:#fff;border-bottom:3px solid var(--blue);box-shadow:0 6px 24px rgba(8,42,71,.10)}
@@ -479,19 +479,20 @@ const CSS = `
 .dz-meta{display:flex;flex-wrap:wrap;gap:10px;flex:1 1 420px}
 .dz-f{display:flex;flex-direction:column;gap:3px;min-width:0}
 .dz-f>span{font:500 .62rem 'DM Mono',ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
-.dz input,.dz select,.dz textarea{font:inherit;font-size:16px;color:var(--ink);background:#fff;border:1px solid var(--ink);padding:9px 10px;border-radius:0;width:100%}
+.dz input,.dz select,.dz textarea{font:inherit;font-size:16px;color:var(--ink);background:#fff;border:1px solid var(--rule);padding:9px 10px;border-radius:9px;width:100%;min-width:0}
 .dz textarea{resize:vertical}
 .dz-wide{flex:2 1 200px}.dz-code{flex:0 1 90px}.dz-num{flex:0 1 130px}.dz-grid{margin-left:auto;flex:0 0 100px}
 .dz-acts{display:flex;flex-wrap:wrap;gap:8px}
-.dz-b{background:#fff;color:var(--ink);border:1px solid var(--ink);padding:10px 14px;font-size:.88rem;font-weight:500;min-height:42px;transition:.15s}
+.dz-b{background:#fff;color:var(--ink);border:1px solid var(--rule);border-radius:9px;padding:10px 14px;font-size:.88rem;font-weight:650;min-height:44px;transition:.15s}
 .dz-b:hover:not(:disabled){background:var(--ink);color:#fff}
 .dz-b:disabled{opacity:.4;cursor:default}
 .dz-b.pri{background:var(--blue);border-color:var(--blue);color:#fff}
 .dz-b.pri:hover:not(:disabled){background:var(--ink)}
 .dz-b.danger{color:#a4262c;border-color:#a4262c}.dz-b.danger:hover{background:#a4262c;color:#fff}
 .dz-b.full{width:100%;margin-top:10px}
-.dz-body{display:grid;grid-template-columns:250px minmax(0,1fr) 290px;gap:16px;align-items:start}
-.dz-card{background:var(--card);border:1px solid var(--ink);padding:14px;margin-bottom:14px}
+.dz-body{display:grid;grid-template-columns:180px minmax(0,1fr) 250px;gap:16px;align-items:start}
+.dz-body>*{min-width:0}
+.dz-card{background:var(--card);border:1px solid var(--rule);border-radius:14px;padding:14px;margin-bottom:14px}
 .dz-card h3{margin:0 0 12px;font:500 .7rem 'DM Mono',ui-monospace,monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--blue)}
 .dz-mute{color:var(--mute);font-size:.86rem;margin:8px 0 0;line-height:1.45}
 .dz-tpl{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -523,7 +524,7 @@ const CSS = `
 .dz-li-a{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .dz-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 20px;z-index:60;font-size:.9rem}
 @media(min-width:721px){.dz-modal{align-items:center;padding:20px}}
-@media(max-width:1020px){
+@media(max-width:1200px){
  .dz-body{grid-template-columns:1fr;gap:12px}
  .dz-left{order:1;display:flex;gap:12px;overflow-x:auto;padding-bottom:4px}
  .dz-left .dz-card{flex:0 0 auto;margin:0;min-width:0}
@@ -532,7 +533,7 @@ const CSS = `
  .dz-canvas{max-height:none}.dz-canvas svg{max-height:62vh}
 }
 @media(max-width:720px){
- .dz-in{padding:10px}
+ .dz-in{padding:0}
  .dz-icon{height:46px}.dz-wm-t{font-size:1.15rem}.dz-wm-b{font-size:.48rem}.dz-brand-in{min-height:68px}
  .dz-foot-t{text-align:left}
  .dz-title b{display:none}

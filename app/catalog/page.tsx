@@ -18,6 +18,7 @@ import {
   Settings2,
 } from "lucide-react";
 import { AdminDashboard } from "@/components/admin-dashboard";
+import { AppShell } from "@/components/app-shell";
 import { FinishedProjectsScreen } from "@/components/finished-projects";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -355,7 +356,8 @@ export default function Home() {
   const quoteDate = new Intl.DateTimeFormat("en-PH", { dateStyle: "long" }).format(new Date());
 
   return (
-    <main className="app-shell">
+    <AppShell wide>
+    <div className="catalog-shell">
       <aside className="side-rail no-print">
         <div className="brand-lockup compact-brand">
           <span className="brand-mark">
@@ -403,7 +405,7 @@ export default function Home() {
       </aside>
 
       <section className="workspace">
-        <header className="app-header no-print">
+        <header className="catalog-header no-print">
           <div className="mobile-brand brand-lockup">
             <span className="brand-mark">
               <img src={companyMarkSrc} alt="Azarraga logo" />
@@ -916,6 +918,7 @@ export default function Home() {
           <AdminDashboard key={screen} mode={screen === "library" ? "library" : "settings"} catalog={catalog} refresh={refresh} />
         )}
       </section>
-    </main>
+    </div>
+    </AppShell>
   );
 }

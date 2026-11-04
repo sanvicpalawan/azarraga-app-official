@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { designSchema } from "@/app/api/designs/route";
+import { designSchema } from "@/lib/design-schema";
 import {
   addProduct,
   addMedia,

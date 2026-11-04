@@ -4,7 +4,7 @@ import { addProduct, getCatalogSnapshot } from "@/lib/catalog-store";
 
 export const dynamic = "force-dynamic";
 
-export const productSchema = z.object({
+const productSchema = z.object({
   name: z.string().trim().min(1).max(140),
   categoryId: z.number().int().positive(),
   basePrice: z.number().nonnegative(),
