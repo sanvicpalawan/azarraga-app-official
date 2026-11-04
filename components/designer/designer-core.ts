@@ -166,9 +166,9 @@ export function svgToPngDataUrl(svg: string, scale = 2): Promise<string> {
   });
 }
 
-export const blankDesign = (): Design => ({
-  id: uid(), name: '', code: '', description: '', section: 'Windows', type: '', series: '', unit: 'm', spec: defaultSpec('Windows'), widthMm: 1200, heightMm: 1100, updatedAt: new Date().toISOString(),
-  shapes: [{ id: uid(), t: 'rect', x: 0, y: 0, w: 1200, h: 1100, sym: 'none' }],
+export const blankDesign = (seed?: string): Design => ({
+  id: seed ? `draft-${seed}` : uid(), name: '', code: '', description: '', section: 'Windows', type: '', series: '', unit: 'm', spec: defaultSpec('Windows'), widthMm: 1200, heightMm: 1100, updatedAt: seed ? '1970-01-01T00:00:00.000Z' : new Date().toISOString(),
+  shapes: [{ id: seed ? `panel-${seed}` : uid(), t: 'rect', x: 0, y: 0, w: 1200, h: 1100, sym: 'none' }],
 });
 
 /** Rescale every shape when the overall size changes. */

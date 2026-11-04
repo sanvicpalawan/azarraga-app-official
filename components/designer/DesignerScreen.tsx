@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect, react-hooks/refs, react/no-unescaped-entities, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-expressions */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   BLUE, CATALOG, GRID_OPTIONS, INK, PRESETS, SPEC_OPTIONS, SYMBOLS, TEMPLATES, UNIT_LABEL, blankDesign, buildDescription, clamp, defaultSpec, designToSvg,
   formatLength, parseLength, rescale, shapeMarkup, splitRect, svgToPngDataUrl, symbolMarkup, uid,
@@ -42,7 +42,13 @@ function LengthField({ label, value, placeholder, onCommit }: { label: string; v
 }
 
 export default function DesignerScreen({ store = apiStore, initial, onUseInQuote, onProductSaved }: DesignerScreenProps) {
-  const [design, setDesign] = useState<Design>(() => initial ?? blankDesign());
+  const initialId = useId();
+  const [design, setDesign] = useState<Design>(() => initial ?? blankDesign(initialId));
+  useEffect(() => {
+    if (!initial) setDesign((current) => current.id.startsWith('draft-')
+      ? { ...current, id: uid(), updatedAt: new Date().toISOString() }
+      : current);
+  }, [initial]);
   const dref = useRef(design); dref.current = design;
   const past = useRef<Snap[]>([]); const future = useRef<Snap[]>([]);
   const [, bump] = useState(0);
