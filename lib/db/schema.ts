@@ -331,6 +331,16 @@ export const documentLines = pgTable(
     position: integer("position").notNull().default(0),
     itemId: uuid("item_id").references(() => items.id, { onDelete: "set null" }),
 
+    // Optional legacy catalog references; sizes remain canonical millimetres.
+    productId: integer("product_id"),
+    seriesId: integer("series_id"),
+    inputUnit: text("input_unit").notNull().default("m"),
+    glass: text("glass"),
+    finish: text("finish"),
+    notes: text("notes"),
+    designJson: jsonb("design_json").$type<Record<string, unknown>>(),
+    designSvg: text("design_svg"),
+
     code: text("code"), // W1, D1, AL3, SR, BD1
     description: text("description").notNull(), // auto-composed from options + size, editable
     unit: text("unit").notNull().default("set"),

@@ -6,7 +6,10 @@
  * Everything here is read-only and safe to call from server components.
  */
 import { asc, eq } from "drizzle-orm";
-import { getDrizzle, getRawSql } from "./db/client";
+import { isLocalPreview } from "./local-preview";
+import { getDrizzle, getRawSql, readyDocumentSchema } from "./db/client";
+import { usesDocumentMemory } from "./document-memory";
+import { getCatalogSnapshot } from "./catalog-store";
 import { items, optionGroups, options } from "./db/schema";
 
 export interface SpecOption {
@@ -25,6 +28,9 @@ export interface SpecGroup {
 
 /** Groups in dropdown order, each with its options sorted. */
 export async function loadSpecGroups(): Promise<SpecGroup[]> {
+  if (isLocalPreview()) return [];
+  if (usesDocumentMemory()) return [];
+  await readyDocumentSchema();
   const db = getDrizzle();
   const [groups, allOptions] = await Promise.all([
     db.select().from(optionGroups).orderBy(asc(optionGroups.sortOrder)),
@@ -47,7 +53,7 @@ export async function loadSpecGroups(): Promise<SpecGroup[]> {
 }
 
 export interface CategoryWithPrefix {
-  id: number;
+  id: number | string;
   name: string;
   codePrefix: string;
 }
@@ -57,12 +63,15 @@ export interface CategoryWithPrefix {
  * product catalog, so it is read through plain SQL rather than Drizzle.
  */
 export async function loadCategoriesWithPrefix(): Promise<CategoryWithPrefix[]> {
+  if (isLocalPreview()) return [{ id: 1, name: "Windows", codePrefix: "W" }, { id: 2, name: "Doors", codePrefix: "D" }];
+  if (usesDocumentMemory()) return (await getCatalogSnapshot()).categories.map((category)=>({id:category.id,name:category.name,codePrefix:category.name==="Windows"?"W":category.name==="Doors"?"D":"O"}));
+  await readyDocumentSchema();
   const raw = getRawSql();
   const rows = await raw`
     select id, name, code_prefix from categories order by id
   `;
   return rows.map((r) => ({
-    id: Number(r.id),
+    id: typeof r.id === "number" ? r.id : String(r.id),
     name: String(r.name),
     codePrefix: (r.code_prefix as string | null) ?? "",
   }));
@@ -77,6 +86,9 @@ export interface CatalogItem {
 
 /** Items seeded from the product catalog; unitPrice is a reference only. */
 export async function loadItems(): Promise<CatalogItem[]> {
+  if (isLocalPreview()) return [];
+  if (usesDocumentMemory()) return [];
+  await readyDocumentSchema();
   const db = getDrizzle();
   const rows = await db
     .select({

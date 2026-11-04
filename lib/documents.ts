@@ -21,7 +21,11 @@ import {
   type SectionInput,
 } from "./calc";
 import { formatDocumentNumber } from "./describe";
-import { getDrizzle, getRawSql } from "./db/client";
+import { getDrizzle, getRawSql, readyDocumentSchema } from "./db/client";
+import { memory, memoryClient, memoryNumber, memoryWrite, usesDocumentMemory } from "./document-memory";
+import { assertQuoteTransition } from "./quote-lifecycle";
+import { validateDocumentDraft } from "./document-validation";
+import { isLocalPreview, previewDocuments } from "./local-preview";
 import {
   clients,
   companySettings,
@@ -106,8 +110,8 @@ const SETTINGS_DEFAULTS = {
   quotePrefix: "Q",
   invoicePrefix: "INV",
   numberPattern: "{prefix}{year}-{seq}",
-  numberStep: 5,
-  numberPad: 0,
+  numberStep: 1,
+  numberPad: 3,
   quoteValidityDays: 30,
   paymentTermsDays: 15,
   defaultDepositPercent: 70,
@@ -119,12 +123,17 @@ const SETTINGS_DEFAULTS = {
 };
 
 export async function getSettings(): Promise<Settings> {
+  if (isLocalPreview()) return { ...SETTINGS_DEFAULTS };
+  if (usesDocumentMemory()) return structuredClone(memory.settings ?? SETTINGS_DEFAULTS);
+  await readyDocumentSchema();
   const db = getDrizzle();
   const rows = await db.select().from(companySettings).where(eq(companySettings.id, 1)).limit(1);
   return rows[0] ?? { ...SETTINGS_DEFAULTS };
 }
 
 export async function saveSettings(patch: Partial<Settings>): Promise<void> {
+  if (usesDocumentMemory()) { memory.settings = { ...SETTINGS_DEFAULTS, ...memory.settings, ...patch }; return; }
+  await readyDocumentSchema();
   const db = getDrizzle();
   const rows = await db.select({ id: companySettings.id }).from(companySettings);
   if (rows.length === 0) {
@@ -147,6 +156,8 @@ export async function saveSettings(patch: Partial<Settings>): Promise<void> {
  * increment and the read happen in one statement on the server.
  */
 export async function nextDocumentNumber(type: DocType, year = new Date().getFullYear()): Promise<string> {
+  if (usesDocumentMemory()) return memoryNumber(type, await getSettings(), year, true);
+  await readyDocumentSchema();
   const db = getDrizzle();
   const settings = await getSettings();
   const step = Math.max(Number(settings.numberStep) || 5, 1);
@@ -171,6 +182,8 @@ export async function nextDocumentNumber(type: DocType, year = new Date().getFul
 
 /** Where the next quote of this year would land. Used by the list header. */
 export async function peekNextDocumentNumber(type: DocType, year = new Date().getFullYear()): Promise<string> {
+  if (isLocalPreview()) return `${type === "quote" ? "Q" : "INV"}${year}-PREVIEW`;
+  if (usesDocumentMemory()) return memoryNumber(type, await getSettings(), year, false);
   const settings = await getSettings();
   const step = Math.max(Number(settings.numberStep) || 5, 1);
   const db = getDrizzle();
@@ -223,6 +236,8 @@ export interface ClientDraft {
 }
 
 export async function upsertClient(draft: ClientDraft): Promise<string> {
+  if (usesDocumentMemory()) return memoryClient(draft);
+  await readyDocumentSchema();
   const db = getDrizzle();
   if (draft.id) {
     const rows = await db.select({ id: clients.id }).from(clients).where(eq(clients.id, draft.id)).limit(1);
@@ -246,11 +261,26 @@ export async function upsertClient(draft: ClientDraft): Promise<string> {
   return inserted[0]!.id;
 }
 
+export async function listCustomers(): Promise<Client[]> {
+  if (isLocalPreview()) return [previewDocuments()[0].client];
+  if (usesDocumentMemory()) return structuredClone([...memory.clients.values()]).sort((a,b) => a.name.localeCompare(b.name));
+  await readyDocumentSchema();
+  return getDrizzle().select().from(clients).where(eq(clients.archived, false)).orderBy(clients.name);
+}
+
 /* ------------------------------------------------------------------ */
 /* Draft shapes (what the editor posts)                                */
 /* ------------------------------------------------------------------ */
 
 export interface LineDraft {
+  productId?: number | null;
+  seriesId?: number | null;
+  inputUnit?: string;
+  glass?: string | null;
+  finish?: string | null;
+  notes?: string | null;
+  designJson?: Record<string, unknown> | null;
+  designSvg?: string | null;
   id?: string;
   itemId?: string | null;
   code?: string | null;
@@ -391,6 +421,9 @@ function draftSource(draft: DocumentDraft, settings: Settings): TotalsSource {
  * once, so a duplicate always gets its own identity.
  */
 export async function createDocument(draft: DocumentDraft): Promise<string> {
+  draft = validateDocumentDraft(draft);
+  if (usesDocumentMemory()) return memoryWrite(draft, await getSettings()).id;
+  await readyDocumentSchema();
   const db = getDrizzle();
   const settings = await getSettings();
   const type: DocType = draft.type ?? "quote";
@@ -439,12 +472,16 @@ export async function createDocument(draft: DocumentDraft): Promise<string> {
     .returning({ id: documents.id });
 
   const id = inserted[0]!.id;
-  await writeSections(id, draft.sections, totals);
+  try { await writeSections(id, draft.sections, totals); }
+  catch (error) { await db.delete(documents).where(eq(documents.id,id)); throw error; }
   return id;
 }
 
 /** Replaces the header, sections and lines of an existing document. */
 export async function saveDocument(id: string, draft: DocumentDraft): Promise<DocumentResult> {
+  draft = validateDocumentDraft(draft);
+  if (usesDocumentMemory()) return memoryWrite(draft, await getSettings(), id).totals;
+  await readyDocumentSchema();
   const db = getDrizzle();
   const existing = await db
     .select()
@@ -466,7 +503,7 @@ export async function saveDocument(id: string, draft: DocumentDraft): Promise<Do
   const totals = computeDraftTotals(draft.sections, source);
   const clientId = await upsertClient(draft.client);
 
-  await db
+  const headerUpdate = db
     .update(documents)
     .set({
       clientId,
@@ -474,7 +511,7 @@ export async function saveDocument(id: string, draft: DocumentDraft): Promise<Do
       projectAddress: draft.projectAddress ?? current.projectAddress,
       issueDate: draft.issueDate ?? current.issueDate,
       dueDate: draft.dueDate ?? current.dueDate,
-      currency: draft.currency ?? current.currency,
+      currency: current.currency,
       discountType: source.discountType,
       discountPercent: source.discountPercent,
       discountFixed: source.discountFixed,
@@ -489,12 +526,12 @@ export async function saveDocument(id: string, draft: DocumentDraft): Promise<Do
       total: totals.total,
       notes: draft.notes ?? current.notes,
       terms: draft.terms ?? current.terms,
-      status: draft.status ?? current.status,
+      status: current.status,
       updatedAt: new Date(),
     })
-    .where(eq(documents.id, id));
+    .where(eq(documents.id, id)).toSQL();
 
-  await writeSections(id, draft.sections, totals);
+  await writeSections(id, draft.sections, totals, headerUpdate);
   return totals;
 }
 
@@ -506,10 +543,12 @@ async function writeSections(
   documentId: string,
   sectionDrafts: SectionDraft[],
   totals: DocumentResult,
+  headerUpdate?: { sql: string; params: unknown[] },
 ): Promise<void> {
   const raw = getRawSql();
 
   interface LineRow {
+    metadata: LineDraft;
     id: string;
     sectionId: string;
     position: number;
@@ -549,6 +588,7 @@ async function writeSections(
     s.lines.forEach((l, li) => {
       const result = computeLine(lineInput(l));
       lineRows.push({
+        metadata: l,
         id: crypto.randomUUID(),
         sectionId,
         position: li,
@@ -572,7 +612,10 @@ async function writeSections(
   });
 
   // Sections are removed first (lines cascade), then everything is rebuilt.
-  const stmts: unknown[] = [raw`delete from document_sections where document_id = ${documentId}`];
+  const stmts: unknown[] = [
+    ...(headerUpdate ? [raw.query(headerUpdate.sql, headerUpdate.params)] : []),
+    raw`delete from document_sections where document_id = ${documentId}`,
+  ];
 
   for (const p of sectionParams) {
     stmts.push(raw`
@@ -586,12 +629,16 @@ async function writeSections(
       insert into document_lines (
         id, document_id, section_id, position, item_id, code, description, unit,
         pricing_mode, area_unit, width_mm, height_mm, length_mm, min_area,
-        quantity, unit_price, options, spec_key, line_total
+        quantity, unit_price, options, spec_key, line_total,
+        product_id, series_id, input_unit, glass, finish, notes, design_json, design_svg
       ) values (
         ${l.id}, ${documentId}, ${l.sectionId}, ${l.position}, ${l.itemId}, ${l.code},
         ${l.description}, ${l.unit}, ${l.pricingMode}, ${l.areaUnit},
         ${l.widthMm}, ${l.heightMm}, ${l.lengthMm}, ${l.minArea},
-        ${l.quantity}, ${l.unitPrice}, ${l.options}, ${l.specKey}, ${l.lineTotal}
+        ${l.quantity}, ${l.unitPrice}, ${l.options}, ${l.specKey}, ${l.lineTotal},
+        ${l.metadata.productId ?? null}, ${l.metadata.seriesId ?? null}, ${l.metadata.inputUnit ?? "m"},
+        ${l.metadata.glass ?? null}, ${l.metadata.finish ?? null}, ${l.metadata.notes ?? null},
+        ${l.metadata.designJson ? JSON.stringify(l.metadata.designJson) : null}, ${l.metadata.designSvg ?? null}
       )
     `);
   }
@@ -626,6 +673,9 @@ export interface DocumentGraph extends Document {
 }
 
 export async function loadDocument(id: string): Promise<DocumentGraph | null> {
+  if (isLocalPreview()) return previewDocuments().find((doc) => doc.id === id) ?? null;
+  if (usesDocumentMemory()) { const doc=memory.docs.get(id); return doc ? structuredClone({...doc,client:memory.clients.get(doc.clientId)??doc.client}) : null; }
+  await readyDocumentSchema();
   const db = getDrizzle();
   const rows = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
   const doc = rows[0];
@@ -656,6 +706,9 @@ export async function loadDocument(id: string): Promise<DocumentGraph | null> {
 }
 
 export async function findByShareToken(token: string): Promise<DocumentGraph | null> {
+  if (isLocalPreview()) return previewDocuments().find((doc) => doc.shareToken === token) ?? null;
+  if (usesDocumentMemory()) return structuredClone([...memory.docs.values()].find((doc) => doc.shareToken === token) ?? null);
+  await readyDocumentSchema();
   const db = getDrizzle();
   const rows = await db
     .select({ id: documents.id })
@@ -675,6 +728,14 @@ export async function listDocuments(opts: {
   status?: Document["status"];
   limit?: number;
 } = {}): Promise<DocumentListItem[]> {
+  if (isLocalPreview()) return previewDocuments()
+    .filter((doc) => (!opts.type || doc.type === opts.type) && (!opts.status || doc.status === opts.status))
+    .slice(0, opts.limit ?? 200)
+    .map((doc) => ({ ...doc, clientName: doc.client.name, paymentStatus: "unpaid" as const }));
+  if (usesDocumentMemory()) return [...memory.docs.values()].filter((doc) => (!opts.type || doc.type === opts.type) && (!opts.status || doc.status === opts.status))
+    .sort((a,b) => b.updatedAt.getTime() - a.updatedAt.getTime()).slice(0, opts.limit ?? 200)
+    .map((doc) => ({ ...structuredClone(doc), clientName: memory.clients.get(doc.clientId)?.name ?? doc.client.name, paymentStatus: paymentStatus(doc.total, doc.amountPaid) }));
+  await readyDocumentSchema();
   const db = getDrizzle();
   const conds = [];
   if (opts.type) conds.push(eq(documents.type, opts.type));
@@ -699,6 +760,9 @@ export async function listDocuments(opts: {
 }
 
 export async function listPayments(documentId: string) {
+  if (isLocalPreview()) return [];
+  if (usesDocumentMemory()) return structuredClone([...memory.payments.values()].filter((payment)=>payment.documentId===documentId));
+  await readyDocumentSchema();
   const db = getDrizzle();
   return db
     .select()
@@ -709,6 +773,9 @@ export async function listPayments(documentId: string) {
 
 /** True once this quote has already been turned into an invoice. */
 export async function quoteAlreadyInvoiced(quoteId: string): Promise<boolean> {
+  if (isLocalPreview()) return false;
+  if (usesDocumentMemory()) return [...memory.docs.values()].some((doc) => doc.convertedFromId === quoteId);
+  await readyDocumentSchema();
   const db = getDrizzle();
   const rows = await db
     .select({ id: documents.id })
@@ -723,6 +790,13 @@ export async function quoteAlreadyInvoiced(quoteId: string): Promise<boolean> {
 /* ------------------------------------------------------------------ */
 
 export async function setStatus(id: string, status: Document["status"]): Promise<void> {
+  const doc = await loadDocument(id);
+  if (!doc) throw new Error("Document not found");
+  if (doc.type === "quote") assertQuoteTransition(doc.status, status);
+  if (usesDocumentMemory()) {
+    memory.docs.set(id, { ...doc, status, updatedAt: new Date(), ...(status === "sent" ? { sentAt: new Date() } : {}), ...(status === "accepted" ? { acceptedAt: new Date() } : {}) });
+    return;
+  }
   const db = getDrizzle();
   await db
     .update(documents)
@@ -731,6 +805,7 @@ export async function setStatus(id: string, status: Document["status"]): Promise
 }
 
 export async function markViewed(id: string): Promise<void> {
+  if (usesDocumentMemory()) { const doc=memory.docs.get(id);if(doc&&!doc.viewedAt)memory.docs.set(id,{...doc,viewedAt:new Date()});return; }
   const db = getDrizzle();
   await db
     .update(documents)
@@ -739,6 +814,10 @@ export async function markViewed(id: string): Promise<void> {
 }
 
 export async function acceptDocument(id: string): Promise<void> {
+  const graph=await loadDocument(id);
+  if(!graph || graph.type!=="quote")throw new Error("Quotation not found");
+  assertQuoteTransition(graph.status,"accepted");
+  if (usesDocumentMemory()) { await setStatus(id,"accepted");return; }
   const db = getDrizzle();
   await db
     .update(documents)
@@ -755,17 +834,13 @@ export async function duplicateDocument(id: string): Promise<string> {
   const graph = await loadDocument(id);
   if (!graph) throw new Error("Document not found");
 
-  const clientRow = await getDrizzle()
-    .select()
-    .from(clients)
-    .where(eq(clients.id, graph.clientId))
-    .limit(1);
-  const c = clientRow[0]!;
+  const c = graph.client;
+  const sectionIds = new Map(graph.sections.map((section)=>[section.id,crypto.randomUUID()]));
 
   return createDocument({
     type: graph.type,
     client: {
-      id: undefined, // a fresh client row - the original must not be shared
+      id: c.id,
       name: c.name,
       contactPerson: c.contactPerson,
       email: c.email,
@@ -788,11 +863,14 @@ export async function duplicateDocument(id: string): Promise<string> {
     leadTime: graph.leadTime,
     notes: graph.notes,
     terms: graph.terms,
+    acceptedSectionId: graph.acceptedSectionId ? sectionIds.get(graph.acceptedSectionId) ?? null : null,
     sections: graph.sections.map((s) => ({
+      id: sectionIds.get(s.id),
       title: s.title,
       kind: s.kind,
       note: s.note,
       lines: s.lines.map((l) => ({
+        ...l,
         itemId: l.itemId,
         code: l.code,
         description: l.description,
@@ -822,12 +900,13 @@ export async function convertQuoteToInvoice(quoteId: string): Promise<string> {
   if (graph.type !== "quote") throw new Error("Only quotes can be converted");
 
   const settings = await getSettings();
-  const clientRow = await getDrizzle().select().from(clients).where(eq(clients.id, graph.clientId)).limit(1);
-  const c = clientRow[0]!;
+  const c = graph.client;
+  const sectionIds = new Map(graph.sections.map((section)=>[section.id,crypto.randomUUID()]));
 
   return createDocument({
     type: "invoice",
     client: {
+      id:c.id,
       name: c.name,
       contactPerson: c.contactPerson,
       email: c.email,
@@ -852,11 +931,14 @@ export async function convertQuoteToInvoice(quoteId: string): Promise<string> {
     notes: graph.notes,
     terms: settings.defaultInvoiceTerms ?? graph.terms,
     status: "unpaid",
+    acceptedSectionId: graph.acceptedSectionId ? sectionIds.get(graph.acceptedSectionId) ?? null : null,
     sections: graph.sections.map((s) => ({
+      id: sectionIds.get(s.id),
       title: s.title,
       kind: s.kind,
       note: s.note,
       lines: s.lines.map((l) => ({
+        ...l,
         itemId: l.itemId,
         code: l.code,
         description: l.description,
@@ -873,6 +955,12 @@ export async function convertQuoteToInvoice(quoteId: string): Promise<string> {
       })),
     })),
   }).then(async (invoiceId) => {
+    if(usesDocumentMemory()){
+      const invoice=memory.docs.get(invoiceId)!;
+      memory.docs.set(invoiceId,{...invoice,convertedFromId:quoteId,status:"unpaid"});
+      memory.docs.set(quoteId,{...graph,status:"accepted"});
+      return invoiceId;
+    }
     await getDrizzle()
       .update(documents)
       .set({ convertedFromId: quoteId })
@@ -896,8 +984,13 @@ export async function recordPayment(input: {
   reference?: string | null;
   notes?: string | null;
 }): Promise<void> {
+  if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("Payment amount must be greater than zero");
+  if(usesDocumentMemory()){
+    if(!memory.docs.has(input.documentId))throw new Error("Document not found");
+    const id=crypto.randomUUID();memory.payments.set(id,{id,documentId:input.documentId,amount:Math.round(input.amount),method:input.method??"cash",reference:input.reference??null,notes:input.notes??null,recordedBy:"owner",paidAt:new Date()});
+    await recalcAmountPaid(input.documentId);return;
+  }
   const db = getDrizzle();
-  if (input.amount <= 0) throw new Error("Payment amount must be greater than zero");
 
   await db.insert(payments).values({
     documentId: input.documentId,
@@ -912,6 +1005,7 @@ export async function recordPayment(input: {
 }
 
 export async function deletePayment(paymentId: string): Promise<void> {
+  if(usesDocumentMemory()){const payment=memory.payments.get(paymentId);if(payment){memory.payments.delete(paymentId);await recalcAmountPaid(payment.documentId);}return;}
   const db = getDrizzle();
   const rows = await db
     .select({ documentId: payments.documentId })
@@ -925,6 +1019,11 @@ export async function deletePayment(paymentId: string): Promise<void> {
 
 /** Sums the payment rows and stores the result on the document. */
 export async function recalcAmountPaid(documentId: string): Promise<void> {
+  if(usesDocumentMemory()){
+    const doc=memory.docs.get(documentId);if(!doc)return;
+    const amountPaid=[...memory.payments.values()].filter(p=>p.documentId===documentId).reduce((sum,p)=>sum+p.amount,0);
+    memory.docs.set(documentId,{...doc,amountPaid,status:doc.type==="invoice"?paymentStatus(doc.total,amountPaid):doc.status,updatedAt:new Date()});return;
+  }
   const db = getDrizzle();
   const sum = await db
     .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })

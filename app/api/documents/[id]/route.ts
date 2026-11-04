@@ -65,7 +65,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         return NextResponse.json({ id: invoiceId });
       }
       case "status": {
-        await setStatus(id, body.status);
+        await setStatus(id, body.status === "rejected" ? "declined" : body.status);
         return NextResponse.json({ ok: true });
       }
       // The client pressed "Accept" on the share page.

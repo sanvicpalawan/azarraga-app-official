@@ -4,6 +4,7 @@ import {
   type NeonQueryPromise,
 } from "@neondatabase/serverless";
 import { buildDefaultCatalogData } from "./catalog-seed";
+import { DOCUMENT_DDL_STATEMENTS } from "./document-ddl";
 
 export type Db = NeonQueryFunction<false, false>;
 
@@ -167,9 +168,18 @@ export function readySchema(): Promise<SchemaStatus> {
 
 export async function ensureCatalogSchema(): Promise<SchemaStatus> {
   const db = getDb();
+  const categoryColumns = await db.query(`select data_type from information_schema.columns
+    where table_schema = 'public' and table_name = 'categories' and column_name = 'id'`);
+  if (categoryColumns[0]?.data_type === "uuid") {
+    // A normalized-only installation owns this category key type. Do not
+    // retrofit integer catalog foreign keys or seed integer category IDs.
+    await ensureDocumentTables(db);
+    return { seeded: false };
+  }
   for (const statement of DDL_STATEMENTS) {
     await db.query(statement);
   }
+  await ensureDocumentTables(db);
   const rows = await db.query(
     "select (select count(*) from products)::int as products, (select count(*) from settings)::int as settings",
   );
@@ -179,6 +189,35 @@ export async function ensureCatalogSchema(): Promise<SchemaStatus> {
   }
   await seedDefaults(db);
   return { seeded: true };
+}
+
+let documentSchemaReady: Promise<void> | null = null;
+
+/** Prepare normalized document tables on the catalog database. Existing UUID
+ * categories stay intact; empty databases initialize integer catalog IDs first.
+ * Failures are retried on the next request.
+ */
+export function readyDocumentSchema(): Promise<void> {
+  documentSchemaReady ??= (async () => {
+    const db = getDb();
+    const columns = await db.query(`select data_type from information_schema.columns
+      where table_schema = 'public' and table_name = 'categories' and column_name = 'id'`);
+    if (columns[0]?.data_type === "uuid") {
+      await ensureDocumentTables(db);
+    } else {
+      await readySchema();
+    }
+  })().catch((error) => {
+    documentSchemaReady = null;
+    throw error;
+  });
+  return documentSchemaReady;
+}
+
+async function ensureDocumentTables(db: Db): Promise<void> {
+  for (const statement of DOCUMENT_DDL_STATEMENTS) {
+    await db.query(statement);
+  }
 }
 
 /**

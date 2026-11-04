@@ -4,20 +4,31 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, Plus, Save, Send, Sparkles, Trash2, X } from "lucide-react";
 import { computeDocument, computeLine, computeAlternatives } from "@/lib/calc";
-import { composeDescription, nextItemCode, parseMetersToMm } from "@/lib/describe";
+import { composeDescription, nextItemCode } from "@/lib/describe";
+import { parseMeasurement, formatMeasurement, validateLineNumbers, type MeasurementUnit } from "@/lib/measurements";
 import { formatMoney, parseMoneyInput } from "@/lib/currency";
 import type { CategoryWithPrefix, CatalogItem, SpecGroup } from "@/lib/spec-options";
 import type { DocumentGraph, Settings } from "@/lib/documents";
+import type { Client } from "@/lib/db/schema";
+import type { Product } from "@/lib/catalog-types";
 
 /* ------------------------------------------------------------------ */
 /* Local shapes                                                        */
 /* ------------------------------------------------------------------ */
 
 interface LineState {
+  productId?: number | null;
   key: string;
+  saved?: NonNullable<DocumentGraph["sections"]>[number]["lines"][number];
   selected: Record<string, string>; // groupId -> optionId
   description: string;
   manualDescription: boolean;
+  measurementUnit: MeasurementUnit;
+  pricingMode: "per_unit" | "per_area";
+  areaUnit: "sqm" | "sqft";
+  minArea: number;
+  unit: string;
+  options: { groupId: string; groupName: string; optionId: string; label: string; priceAdjustment: number }[];
   widthM: string;
   heightM: string;
   quantity: string;
@@ -38,6 +49,7 @@ const newLineKey = () => Math.random().toString(36).slice(2, 10);
 const blankLine = (codePrefix = "W"): LineState => ({
   key: newLineKey(),
   selected: {},
+  measurementUnit: "m", pricingMode: "per_unit", areaUnit: "sqm", minArea: 0, unit: "set", options: [],
   description: "",
   manualDescription: false,
   widthM: "",
@@ -70,9 +82,6 @@ function Field({
   );
 }
 
-const toMetres = (mm: number | null | undefined): string =>
-  mm ? String(Math.round(mm) / 1000) : "";
-
 /* ------------------------------------------------------------------ */
 /* Editor                                                              */
 /* ------------------------------------------------------------------ */
@@ -83,27 +92,37 @@ export function QuoteEditor({
   categories,
   items,
   settings,
+  customers = [],
+  initialCustomerId,
+  initialProduct,
+  initialDescription,
 }: {
   document?: DocumentGraph | null;
   specGroups: SpecGroup[];
   categories: CategoryWithPrefix[];
   items: CatalogItem[];
   settings: Settings;
+  customers?: Client[];
+  initialCustomerId?: string;
+  initialProduct?: Product;
+  initialDescription?: string;
 }) {
   const router = useRouter();
   const isEdit = Boolean(doc);
+  const snapshot = { currency: doc?.currency ?? settings.currency, vatMode: doc?.vatMode ?? settings.vatMode, vatRate: Number(doc?.vatRate ?? settings.vatRate) };
 
   const firstPrefix = categories[0]?.codePrefix || "W";
   const today = new Date().toISOString().slice(0, 10);
+  const initialCustomer = doc?.client ?? customers.find((customer) => customer.id === initialCustomerId);
 
   const [client, setClient] = useState(() => ({
-    id: doc?.clientId,
-    name: doc?.client?.name ?? "",
-    contactPerson: doc?.client?.contactPerson ?? "",
-    phone: doc?.client?.phone ?? "",
-    email: doc?.client?.email ?? "",
-    address: doc?.client?.address ?? "",
-    tin: doc?.client?.tin ?? "",
+    id: initialCustomer?.id,
+    name: initialCustomer?.name ?? "",
+    contactPerson: initialCustomer?.contactPerson ?? "",
+    phone: initialCustomer?.phone ?? "",
+    email: initialCustomer?.email ?? "",
+    address: initialCustomer?.address ?? "",
+    tin: initialCustomer?.tin ?? "",
   }));
   const [meta, setMeta] = useState({
     projectName: doc?.projectName ?? "",
@@ -117,7 +136,7 @@ export function QuoteEditor({
   const [pricing, setPricing] = useState({
     discountType: (doc?.discountType ?? "percent") as "percent" | "fixed",
     discountPercent: String(Number(doc?.discountPercent ?? 0)),
-    discountFixed: String(Math.round(Number(doc?.discountFixed ?? 0) / 100)),
+    discountFixed: String(Number(doc?.discountFixed ?? 0) / 100),
     depositPercent: String(Number(doc?.depositPercent ?? settings.defaultDepositPercent ?? 70)),
     charges: (doc?.extraCharges ?? []) as { label: string; amount: number }[],
     chargeLabel: "",
@@ -128,7 +147,7 @@ export function QuoteEditor({
   );
   const [sections, setSections] = useState<SectionState[]>(() => {
     if (!doc?.sections?.length) {
-      return [{ key: "s0", title: "", kind: "included", lines: [blankLine(firstPrefix)] }];
+      return [{ key: "s0", title: "", kind: "included", lines: [{ ...blankLine(firstPrefix), productId: initialProduct?.id, description: initialProduct ? `${initialProduct.name}${initialProduct.description ? `, ${initialProduct.description}` : ""}` : initialDescription ?? "", manualDescription: Boolean(initialProduct || initialDescription) }] }];
     }
     return doc.sections.map((s, i) => ({
       key: s.id,
@@ -142,13 +161,15 @@ export function QuoteEditor({
         });
         return {
           key: l.id,
+          saved: l,
           selected,
+          measurementUnit: (["m", "mm", "ft-in"].includes(l.inputUnit) ? l.inputUnit : "m") as MeasurementUnit, pricingMode: l.pricingMode, areaUnit: l.areaUnit, minArea: Number(l.minArea), unit: l.unit, options: l.options ?? [],
           description: l.description,
           manualDescription: true, // a loaded line keeps its exact text
-          widthM: toMetres(l.widthMm),
-          heightM: toMetres(l.heightMm),
+          widthM: formatMeasurement(l.widthMm, (["m", "mm", "ft-in"].includes(l.inputUnit) ? l.inputUnit : "m") as MeasurementUnit),
+          heightM: formatMeasurement(l.heightMm, (["m", "mm", "ft-in"].includes(l.inputUnit) ? l.inputUnit : "m") as MeasurementUnit),
           quantity: String(Number(l.quantity)),
-          unitPrice: String(Math.round(Number(l.unitPrice) / 100)),
+          unitPrice: String(Number(l.unitPrice) / 100),
           codePrefix: l.code?.match(/^[A-Za-z]+/)?.[0] ?? firstPrefix,
         };
       }),
@@ -184,8 +205,8 @@ export function QuoteEditor({
 
   /** Rebuild the description from the dropdowns + size. */
   const autoDescription = (line: LineState): string => {
-    const widthMm = parseMetersToMm(line.widthM);
-    const heightMm = parseMetersToMm(line.heightM);
+    const widthMm = parseMeasurement(line.widthM, line.measurementUnit);
+    const heightMm = parseMeasurement(line.heightM, line.measurementUnit);
     const parts = selectedLabels(line).map((p) => ({ label: p.label, joinWithPrevious: p.join }));
     return composeDescription(parts, { widthMm, heightMm });
   };
@@ -195,7 +216,11 @@ export function QuoteEditor({
     if (selected[groupId] === optionId) delete selected[groupId];
     else selected[groupId] = optionId;
 
-    const next: LineState = { ...line, selected };
+    const group = specGroups.find((g) => g.id === groupId);
+    const option = group?.options.find((o) => o.id === selected[groupId]);
+    const options = line.options.filter((o) => o.groupId !== groupId);
+    if (group && option) options.push({ groupId, groupName: group.name, optionId: option.id, label: option.label, priceAdjustment: option.priceAdjustment });
+    const next: LineState = { ...line, selected, options };
     if (!line.manualDescription) next.description = autoDescription(next);
     updateLine(sKey, line.key, next);
   };
@@ -226,7 +251,7 @@ export function QuoteEditor({
         s.key === sKey
           ? {
               ...s,
-              lines: [...s.lines, { ...line, key: newLineKey(), manualDescription: true }],
+              lines: [...s.lines, { ...line, key: newLineKey(), saved: line.saved ? { ...line.saved, id: "" } : undefined, manualDescription: true }],
             }
           : s,
       ),
@@ -261,25 +286,22 @@ export function QuoteEditor({
         id: s.key,
         kind: s.kind,
         lines: s.lines.map((l) => {
-          const widthMm = parseMetersToMm(l.widthM);
-          const heightMm = parseMetersToMm(l.heightM);
-          const adjustments = specGroups
-            .flatMap((g) => g.options)
-            .filter((o) => Object.values(l.selected).includes(o.id))
-            .reduce((sum, o) => sum + o.priceAdjustment, 0);
+          const widthMm = parseMeasurement(l.widthM, l.measurementUnit);
+          const heightMm = parseMeasurement(l.heightM, l.measurementUnit);
+          const adjustments = l.options.reduce((sum, o) => sum + o.priceAdjustment, 0);
           return {
-            pricingMode: "per_unit" as const,
+            pricingMode: l.pricingMode,
             unitPrice: parseMoneyInput(l.unitPrice || "0"),
             quantity: Number(l.quantity || 0),
             widthMm,
             heightMm,
-            areaUnit: "sqm" as const,
-            minArea: 0,
+            areaUnit: l.areaUnit,
+            minArea: l.minArea,
             options: [{ priceAdjustment: adjustments }],
           };
         }),
       })),
-    [sections, specGroups],
+    [sections],
   );
 
   const totals = useMemo(
@@ -292,16 +314,16 @@ export function QuoteEditor({
           pricing.discountType === "percent"
             ? { type: "percent", value: Number(pricing.discountPercent || 0) }
             : { type: "fixed", value: parseMoneyInput(pricing.discountFixed || "0") },
-        vatMode: settings.vatMode,
-        vatRate: Number(settings.vatRate),
+        vatMode: snapshot.vatMode,
+        vatRate: snapshot.vatRate,
         depositPercent: Number(pricing.depositPercent || 0),
       }),
-    [calcSections, acceptedSectionId, pricing, settings.vatMode, settings.vatRate],
+    [calcSections, acceptedSectionId, pricing, snapshot.vatMode, snapshot.vatRate],
   );
 
   const altTotals = useMemo(
-    () => computeAlternatives({ sections: calcSections, selectedAlternativeId: null, vatMode: settings.vatMode, vatRate: Number(settings.vatRate) }),
-    [calcSections, settings.vatMode, settings.vatRate],
+    () => computeAlternatives({ sections: calcSections, selectedAlternativeId: null, vatMode: snapshot.vatMode, vatRate: snapshot.vatRate }),
+    [calcSections, snapshot.vatMode, snapshot.vatRate],
   );
 
   /** Codes are assigned in line order: W1, W2, D1 ... */
@@ -335,9 +357,9 @@ export function QuoteEditor({
     projectAddress: meta.projectAddress || null,
     issueDate: meta.issueDate,
     dueDate: meta.dueDate || null,
-    currency: settings.currency,
-    vatMode: settings.vatMode,
-    vatRate: Number(settings.vatRate),
+    currency: snapshot.currency,
+    vatMode: snapshot.vatMode,
+    vatRate: snapshot.vatRate,
     discountType: pricing.discountType,
     discountPercent: Number(pricing.discountPercent || 0),
     discountFixed: parseMoneyInput(pricing.discountFixed || "0"),
@@ -356,27 +378,28 @@ export function QuoteEditor({
         note: null,
         lines: s.lines.map((l) => {
           const optionIds = Object.values(l.selected);
-          const snaps = specGroups.flatMap((g) =>
-            g.options
-              .filter((o) => l.selected[g.id] === o.id)
-              .map((o) => ({
-                groupId: g.id,
-                groupName: g.name,
-                optionId: o.id,
-                label: o.label,
-                priceAdjustment: o.priceAdjustment,
-              })),
-          );
+          const snaps = l.options;
           return {
-            itemId: items.find((i) => i.name === l.description.split(",")[0])?.id ?? null,
+            id: l.saved?.id || undefined,
+            productId: l.productId ?? l.saved?.productId ?? null,
+            seriesId: l.saved?.seriesId ?? null,
+            inputUnit: l.measurementUnit,
+            glass: l.saved?.glass ?? null,
+            finish: l.saved?.finish ?? null,
+            notes: l.saved?.notes ?? null,
+            designJson: l.saved?.designJson ?? null,
+            designSvg: l.saved?.designSvg ?? null,
+            lengthMm: l.saved?.lengthMm ?? null,
+            itemId: l.saved?.itemId ?? items.find((i) => i.name === l.description.split(",")[0])?.id ?? null,
             code: l.code,
             description: l.description || "Item",
-            unit: deriveUnit(l.description),
-            pricingMode: "per_unit" as const,
-            areaUnit: "sqm" as const,
-            widthMm: parseMetersToMm(l.widthM),
-            heightMm: parseMetersToMm(l.heightM),
-            quantity: Number(l.quantity || 1),
+            unit: l.unit,
+            minArea: l.minArea,
+            pricingMode: l.pricingMode,
+            areaUnit: l.areaUnit,
+            widthMm: parseMeasurement(l.widthM, l.measurementUnit),
+            heightMm: parseMeasurement(l.heightM, l.measurementUnit),
+            quantity: Number(l.quantity),
             unitPrice: parseMoneyInput(l.unitPrice || "0"),
             options: snaps,
             specKey: optionIds.length ? optionIds.sort().join("|") : null,
@@ -385,15 +408,20 @@ export function QuoteEditor({
       })),
   });
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     if (!client.name.trim()) {
       setNotice("Enter the customer name first.");
-      return;
+      return false;
     }
+    const invalid = sections.flatMap((s) => s.lines).map((l, i) => {
+      const error = validateLineNumbers(l.quantity, l.unitPrice || "0", l.widthM, l.heightM, l.measurementUnit, l.pricingMode === "per_area");
+      return error ? `Line ${i + 1}: ${error}` : null;
+    }).find(Boolean);
+    if (invalid) { setNotice(invalid); return false; }
     const empty = sections.some((s) => s.lines.length === 0);
     if (empty) {
       setNotice("Every section needs at least one line - or remove the section.");
-      return;
+      return false;
     }
 
     setSaving(true);
@@ -418,17 +446,20 @@ export function QuoteEditor({
         if (!res.ok) throw new Error((await res.json()).error ?? "Save failed");
         const { id } = await res.json();
         router.push(`/quotes/${id}`);
-        return;
+        return true;
       }
+      return true;
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Something went wrong.");
+      return false;
     } finally {
       setSaving(false);
     }
   };
 
-  const action = async (body: Record<string, unknown>, then?: string) => {
-    if (!doc) return;
+  const action = async (body: Record<string, unknown>) => {
+    if (!doc || busy || saving) return;
+    if (!(await save())) return;
     setBusy(true);
     setNotice(null);
     try {
@@ -439,7 +470,10 @@ export function QuoteEditor({
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Request failed");
-      if (then) router.push(then);
+      if (body.action === "duplicate") {
+        if (!json.id) throw new Error("The copied quotation could not be opened.");
+        router.push(`/quotes/${encodeURIComponent(json.id)}`);
+      }
       else {
         setNotice("Done.");
         router.refresh();
@@ -451,7 +485,7 @@ export function QuoteEditor({
     }
   };
 
-  const currency = settings.currency;
+  const currency = snapshot.currency;
 
   /* ---------------- render ---------------- */
 
@@ -464,6 +498,12 @@ export function QuoteEditor({
             <h2>Customer & project</h2>
           </div>
           <div className="field-grid">
+            <label className="field field--span">Reuse customer
+              <select aria-label="Reuse customer" value={client.id ?? ""} onChange={(event) => {
+                const customer = customers.find((item) => item.id === event.target.value);
+                setClient(customer ? { id:customer.id,name:customer.name,contactPerson:customer.contactPerson??"",phone:customer.phone??"",email:customer.email??"",address:customer.address??"",tin:customer.tin??"" } : { id:undefined,name:"",contactPerson:"",phone:"",email:"",address:"",tin:"" });
+              }}><option value="">New customer</option>{customers.map((customer)=><option key={customer.id} value={customer.id}>{customer.name}{customer.phone ? ` · ${customer.phone}` : ""}</option>)}</select>
+            </label>
             <Field label="Customer name *">
               <input
                 value={client.name}
@@ -587,22 +627,9 @@ export function QuoteEditor({
 
                 {section.lines.map((line, lIdx) => {
                   const code = coded.lines[lIdx]?.code ?? "";
-                  const lineTotal = computeLine({
-                    pricingMode: "per_unit",
-                    unitPrice: parseMoneyInput(line.unitPrice || "0"),
-                    quantity: Number(line.quantity || 0),
-                    widthMm: parseMetersToMm(line.widthM),
-                    heightMm: parseMetersToMm(line.heightM),
-                    options: [
-                      {
-                        priceAdjustment: specGroups
-                          .flatMap((g) => g.options)
-                          .filter((o) => Object.values(line.selected).includes(o.id))
-                          .reduce((s, o) => s + o.priceAdjustment, 0),
-                      },
-                    ],
-                  }).lineTotal;
-
+                  const calculated = calcSections[sIdx].lines[lIdx];
+                  const lineTotal = computeLine(calculated).lineTotal;
+                  const sqft = calculated.widthMm && calculated.heightMm ? (calculated.widthMm * calculated.heightMm / 92903.04).toFixed(2) : "—";
                   return (
                     <div className="line-row" key={line.key}>
                       <div className="option-pick" style={{ marginBottom: 9 }}>
@@ -662,7 +689,16 @@ export function QuoteEditor({
                             placeholder="Pick a series and type, or type it yourself"
                           />
                         </div>
-                        <Field label="Width (m)">
+                        <Field label="Dimension unit">
+                          <select aria-label="Dimension unit" value={line.measurementUnit} onChange={(e) => {
+                            const unit = e.target.value as MeasurementUnit;
+                            const width = parseMeasurement(line.widthM, line.measurementUnit);
+                            const height = parseMeasurement(line.heightM, line.measurementUnit);
+                            if ((line.widthM.trim() && width === null) || (line.heightM.trim() && height === null)) { setNotice("Correct the dimensions before changing units."); return; }
+                            changeSize(section.key, line, { measurementUnit: unit, widthM: formatMeasurement(width, unit), heightM: formatMeasurement(height, unit) });
+                          }}><option value="m">Metres (m)</option><option value="mm">Millimetres (mm)</option><option value="ft-in">Feet / inches</option></select>
+                        </Field>
+                        <Field label={`Width (${line.measurementUnit})`}>
                           <input
                             value={line.widthM}
                             inputMode="decimal"
@@ -672,7 +708,7 @@ export function QuoteEditor({
                             placeholder="1.50"
                           />
                         </Field>
-                        <Field label="Height (m)">
+                        <Field label={`Height (${line.measurementUnit})`}>
                           <input
                             value={line.heightM}
                             inputMode="decimal"
@@ -691,7 +727,12 @@ export function QuoteEditor({
                             }
                           />
                         </Field>
-                        <Field label="Unit cost">
+                        <Field label="Rate basis">
+                          <select aria-label="Rate basis" value={line.pricingMode === "per_unit" ? "set" : line.areaUnit} onChange={(e) => updateLine(section.key, line.key, e.target.value === "set" ? { pricingMode: "per_unit" } : { pricingMode: "per_area", areaUnit: e.target.value as "sqm" | "sqft" })}>
+                            <option value="set">Per {line.unit}</option><option value="sqft">Per square foot</option><option value="sqm">Per square metre</option>
+                          </select>
+                        </Field>
+                        <Field label={`Rate / ${line.pricingMode === "per_unit" ? line.unit : line.areaUnit}`}>
                           <div className="money-input">
                             <input
                               value={line.unitPrice}
@@ -772,6 +813,7 @@ export function QuoteEditor({
                           <Trash2 size={13} />
                         </button>
 
+                        <span className="inline-note">Area: {sqft} sqft{line.minArea > 0 ? ` · Minimum billable area: ${line.minArea} ${line.areaUnit}` : ""}</span>
                         <span className="line-row__total">{formatMoney(lineTotal, currency)}</span>
                       </div>
                     </div>
@@ -843,7 +885,7 @@ export function QuoteEditor({
           )}
           {totals.vatAmount > 0 && (
             <div className="total-line">
-              <span>VAT ({Number(settings.vatRate)}%)</span>
+              <span>VAT ({snapshot.vatRate}%)</span>
               <strong>{formatMoney(totals.vatAmount, currency)}</strong>
             </div>
           )}
@@ -975,28 +1017,31 @@ export function QuoteEditor({
         {notice && <div className="inline-note">{notice}</div>}
 
         <div className="sticky-save">
-          <button type="button" className="btn btn--primary" onClick={save} disabled={saving || busy}>
-            <Save size={16} /> {saving ? "Saving..." : isEdit ? "Save quote" : "Create quote"}
+          <button type="button" className="btn btn--primary" onClick={() => void save()} disabled={saving || busy}>
+            <Save size={16} /> {saving ? "Saving..." : isEdit ? "Save quote" : "Save & review"}
           </button>
           {isEdit && (
             <button
               type="button"
               className="btn"
-              disabled={busy}
-              onClick={() => action({ action: "duplicate" }, "/quotes/new")}
+              disabled={busy || saving}
+              onClick={() => action({ action: "duplicate" })}
               title="Duplicate into a fresh quote"
             >
               <Copy size={16} />
             </button>
           )}
+          {isEdit && doc?.status === "sent" && (["accepted", "rejected"] as const).map((status) => (
+            <button key={status} type="button" className="btn" disabled={busy || saving} onClick={() => action({ action: "status", status })}>Mark {status}</button>
+          ))}
           {isEdit && doc?.status === "draft" && (
             <button
               type="button"
               className="btn"
-              disabled={busy}
+              disabled={busy || saving}
               onClick={() => action({ action: "status", status: "sent" })}
             >
-              <Send size={16} />
+              <Send size={16} /> Mark sent
             </button>
           )}
         </div>
@@ -1008,9 +1053,4 @@ export function QuoteEditor({
 /** "Option A" numbering only counts alternative sections. */
 function sectionTitleCount(sections: SectionState[], index: number): number {
   return sections.slice(0, index + 1).filter((s) => s.kind === "alternative").length - 1;
-}
-
-/** Railings are sold by the linear metre, everything else by the set. */
-function deriveUnit(description: string): string {
-  return /rail|stainless|balustrade|handrail/i.test(description) ? "LM" : "set";
 }

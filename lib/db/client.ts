@@ -37,3 +37,5 @@ export function getRawSql(): RawSql {
   cachedSql ??= neon(connectionString());
   return cachedSql;
 }
+
+export { readyDocumentSchema } from "../db";

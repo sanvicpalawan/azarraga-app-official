@@ -11,7 +11,7 @@ import type { Attribute, Catalog, Product } from "@/lib/catalog-types";
 import type { MediaAsset } from "@/lib/catalog-store-types";
 import DesignerScreen from "@/components/designer/DesignerScreen";
 
-type Props = { catalog: Catalog; refresh: () => Promise<void>; mode: "library" | "settings" };
+type Props = { catalog: Catalog; refresh: () => Promise<void>; mode: "library" | "settings"; initialTab?: "products" | "images" | "studio" };
 type Tab = "overview" | "company" | "products" | "images" | "attributes" | "studio";
 
 const tabLabels: Record<Tab, string> = {
@@ -55,8 +55,8 @@ async function normalizeImage(file: File) {
   return await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Image processing failed.")), "image/png", 0.92));
 }
 
-export function AdminDashboard({ catalog, refresh, mode }: Props) {
-  const [tab, setTab] = useState<Tab>(mode === "library" ? "products" : "company");
+export function AdminDashboard({ catalog, refresh, mode, initialTab = "products" }: Props) {
+  const [tab, setTab] = useState<Tab>(mode === "library" ? initialTab : "company");
   const [notice, setNotice] = useState("");
   const [overview, setOverview] = useState({ totalQuotes: 0, totalRevenue: 0, totalSqft: 0, totalProducts: catalog.products.length, totalCategories: catalog.categories.length, totalMedia: 0 });
   const [settings, setSettings] = useState(catalog.settings);

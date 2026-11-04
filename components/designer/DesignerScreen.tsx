@@ -212,8 +212,8 @@ export default function DesignerScreen({ store = apiStore, initial, onUseInQuote
     setDesign(d); setDirty(false);
     return { d, png };
   };
-  const exportPng = async () => { try { const { png } = await saveOpenProduct(); download(png, fname + '.png'); } catch { flash('Could not save or create PNG'); } };
-  const exportSvg = async () => { try { await saveOpenProduct(); download('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(symbolSvg()), fname + '.svg'); } catch { flash('Could not save or create SVG'); } };
+  const exportPng = async () => { try { const png = await svgToPngDataUrl(symbolSvg(), 2); download(png, fname + '.png'); flash('PNG downloaded. Save to Products to keep a reusable design.'); } catch { flash('Could not create PNG'); } };
+  const exportSvg = () => { try { download('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(symbolSvg()), fname + '.svg'); flash('SVG downloaded. Save to Products to keep a reusable design.'); } catch { flash('Could not create SVG'); } };
   const useInQuote = async () => { try { onUseInQuote?.(dref.current, await svgToPngDataUrl(symbolSvg(), 2)); } catch { flash('Could not create image'); } };
   const save = async () => {
     try { await saveOpenProduct(); } catch { flash('Open Product save failed'); }
@@ -276,7 +276,7 @@ export default function DesignerScreen({ store = apiStore, initial, onUseInQuote
             <button className="dz-b" onClick={redo} disabled={!future.current.length} aria-label="Redo">↷ Redo</button>
             <button className="dz-b" onClick={newDesign}>New</button>
             <button className="dz-b" onClick={openLib}>Library</button>
-            <button className="dz-b pri" onClick={save}>Save Open Product</button>
+            <button className="dz-b pri" onClick={save}>Save to Products</button>
           </div>
         </div>
       </header>

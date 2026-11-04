@@ -75,3 +75,11 @@ pnpm start
 ```
 
 `npm run build` is also supported and invokes the standard `next build` command directly.
+
+## Owner quotation workflow
+
+See [AUDIT.md](AUDIT.md) for the one-page audit and [delivery notes](docs/owner-flow-delivery.md) for the updated routes and data compatibility. The owner can create a customer once, add multiple quote lines, enter dimensions in m/mm/fractional feet-inches, review live totals, save, reopen, preview/PDF and share through WhatsApp. Administration is separated at `/admin`; no login is required during this build, as requested by the owner.
+
+Without `DATABASE_URL`, local development uses editable process memory: browser reloads preserve saved quotes, while restarting the server resets them. Production requires the existing Neon `DATABASE_URL`. Do not set `NEXT_PUBLIC_LOCAL_PREVIEW` or `NEXT_PUBLIC_LOCAL_MEMORY` on Vercel. Image and logo storage remain unchanged.
+
+Development and production builds explicitly select Next.js's Webpack compiler because Turbopack's CSS worker failed in the Windows development environment.

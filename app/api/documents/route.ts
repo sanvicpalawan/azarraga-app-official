@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Add at least one line" }, { status: 400 });
     }
 
-    const id = await createDocument(draft);
+    const id = await createDocument({ ...draft, status: "draft", forcedNumber: undefined });
     return NextResponse.json({ id }, { status: 201 });
   } catch (err) {
     console.error("POST /api/documents", err);

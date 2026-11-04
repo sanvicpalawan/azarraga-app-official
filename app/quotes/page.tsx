@@ -11,7 +11,7 @@ const FILTERS = [
   { key: "draft", label: "Drafts" },
   { key: "sent", label: "Sent" },
   { key: "accepted", label: "Accepted" },
-  { key: "declined", label: "Declined" },
+  { key: "declined", label: "Rejected" },
   { key: "expired", label: "Expired" },
 ];
 

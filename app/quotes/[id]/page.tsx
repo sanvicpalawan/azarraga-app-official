@@ -5,7 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { QuoteEditor } from "@/components/quote-editor";
 import { ShareMenu } from "@/components/share-menu";
 import { QuoteActions } from "@/components/quote-actions";
-import { getSettings, loadDocument, quoteAlreadyInvoiced } from "@/lib/documents";
+import { getSettings, loadDocument, quoteAlreadyInvoiced, listCustomers } from "@/lib/documents";
 import { loadCategoriesWithPrefix, loadItems, loadSpecGroups } from "@/lib/spec-options";
 
 export const dynamic = "force-dynamic";
@@ -16,12 +16,13 @@ export default async function QuoteDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [doc, settings, specGroups, categories, items] = await Promise.all([
+  const [doc, settings, specGroups, categories, items, customers] = await Promise.all([
     loadDocument(id),
     getSettings(),
     loadSpecGroups(),
     loadCategoriesWithPrefix(),
     loadItems(),
+    listCustomers(),
   ]);
 
   if (!doc || doc.type !== "quote") notFound();
@@ -55,12 +56,19 @@ export default async function QuoteDetailPage({
         />
       </div>
 
+      <div className="header-actions-inline no-print" style={{ marginBottom:16 }}>
+        <Link className="btn" href={`/share/${doc.shareToken}`} target="_blank">Preview quotation</Link>
+        <a className="btn" href={`/api/documents/pdf?id=${doc.id}`} download>Download PDF</a>
+        <span className="page-sub">Preview and PDF show the latest saved version.</span>
+      </div>
+
       <QuoteEditor
         document={doc}
         specGroups={specGroups}
         categories={categories}
         items={items}
         settings={settings}
+        customers={customers}
       />
 
       <div className="sticky-save" style={{ position: "static", marginTop: 16 }}>
