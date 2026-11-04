@@ -1,6 +1,7 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import { NextResponse, type NextRequest } from "next/server";
 import { DocumentPdf } from "@/components/document-pdf";
+import { pdfSettings } from "@/lib/pdf-assets";
 import {
   findByShareToken,
   getSettings,
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const settings = await getSettings();
+    const settings = await pdfSettings(await getSettings());
     const buffer = await renderToBuffer(DocumentPdf({ doc, settings }) as never);
 
     const prefix = doc.type === "quote" ? "Quotation" : "Invoice";

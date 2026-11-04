@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
   // so its worker file (statically imported in lib/invoice-parser.ts) gets
   // traced into the Vercel serverless function output.
   serverExternalPackages: ["@napi-rs/canvas"],
+  outputFileTracingIncludes: {
+    "/api/documents/pdf": ["./public/fonts/*.ttf", "./public/azarraga-logo-mark.jpg"],
+  },
 };
 
 export default nextConfig;

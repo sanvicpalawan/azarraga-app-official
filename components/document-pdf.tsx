@@ -1,4 +1,6 @@
-import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
+import { Document, Page, Text, View, StyleSheet, Image, Font } from "@react-pdf/renderer";
+import path from "node:path";
+import { readFileSync } from "node:fs";
 import { formatMoney } from "@/lib/currency";
 import type { DocumentGraph, Settings } from "@/lib/documents";
 
@@ -12,6 +14,9 @@ import type { DocumentGraph, Settings } from "@/lib/documents";
  * Every number comes from the recomputed row totals, never from the client.
  */
 
+Font.register({ family: "AzarragaPDF", src: path.join(process.cwd(), "public/fonts/NotoSans-Regular.ttf") });
+Font.register({ family: "AzarragaPDF-Bold", src: path.join(process.cwd(), "public/fonts/NotoSans-Bold.ttf") });
+
 const BRAND = "#0F4C81";
 const LINE = "#D5DEE8";
 const MUTED = "#607188";
@@ -23,7 +28,7 @@ const s = StyleSheet.create({
     paddingBottom: 40,
     fontSize: 9,
     color: "#14263D",
-    fontFamily: "Helvetica",
+    fontFamily: "AzarragaPDF",
   },
 
   /* ---------- letterhead ---------- */
@@ -45,18 +50,18 @@ const s = StyleSheet.create({
     backgroundColor: BRAND,
     color: "#FFFFFF",
     fontSize: 20,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "AzarragaPDF-Bold",
     textAlign: "center",
     lineHeight: 54,
   },
-  company: { fontSize: 14, fontFamily: "Helvetica-Bold", color: BRAND, marginBottom: 2 },
+  company: { fontSize: 14, fontFamily: "AzarragaPDF-Bold", color: BRAND, marginBottom: 2 },
   address: { fontSize: 7.5, color: MUTED, lineHeight: 1.35 },
   headRight: { textAlign: "right", fontSize: 7.5, color: MUTED, lineHeight: 1.4 },
 
   /* ---------- title row ---------- */
   titleRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 16 },
-  title: { fontSize: 17, fontFamily: "Helvetica-Bold", color: BRAND, letterSpacing: 1.4 },
-  docNo: { fontSize: 9, fontFamily: "Helvetica-Bold", textAlign: "right" },
+  title: { fontSize: 17, fontFamily: "AzarragaPDF-Bold", color: BRAND, letterSpacing: 1.4 },
+  docNo: { fontSize: 9, fontFamily: "AzarragaPDF-Bold", textAlign: "right" },
   docMeta: { fontSize: 7.5, color: MUTED, textAlign: "right", marginTop: 3, lineHeight: 1.4 },
 
   /* ---------- parties ---------- */
@@ -69,7 +74,7 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     marginBottom: 4,
   },
-  partyName: { fontSize: 10.5, fontFamily: "Helvetica-Bold", marginBottom: 2 },
+  partyName: { fontSize: 10.5, fontFamily: "AzarragaPDF-Bold", marginBottom: 2 },
   partyLine: { fontSize: 8, color: MUTED, lineHeight: 1.45 },
 
   /* ---------- table ---------- */
@@ -80,7 +85,7 @@ const s = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 7,
   },
-  th: { color: "#FFFFFF", fontSize: 7, letterSpacing: 0.9, fontFamily: "Helvetica-Bold" },
+  th: { color: "#FFFFFF", fontSize: 7, letterSpacing: 0.9, fontFamily: "AzarragaPDF-Bold" },
   groupRow: {
     flexDirection: "row",
     backgroundColor: "#EDF4FA",
@@ -88,7 +93,7 @@ const s = StyleSheet.create({
     paddingVertical: 4,
     marginTop: 4,
   },
-  groupText: { fontSize: 7.5, fontFamily: "Helvetica-Bold", color: BRAND, letterSpacing: 0.6 },
+  groupText: { fontSize: 7.5, fontFamily: "AzarragaPDF-Bold", color: BRAND, letterSpacing: 0.6 },
   row: {
     flexDirection: "row",
     paddingHorizontal: 7,
@@ -103,7 +108,7 @@ const s = StyleSheet.create({
   cQty: { width: 44, textAlign: "right" },
   cUnit: { width: 66, textAlign: "right" },
   cSub: { width: 74, textAlign: "right" },
-  bold: { fontFamily: "Helvetica-Bold" },
+  bold: { fontFamily: "AzarragaPDF-Bold" },
   muted: { color: MUTED },
 
   /* ---------- totals ---------- */
@@ -118,7 +123,7 @@ const s = StyleSheet.create({
     borderBottomColor: LINE,
   },
   totalLabel: { fontSize: 8, color: MUTED },
-  totalValue: { fontSize: 8.5, fontFamily: "Helvetica-Bold" },
+  totalValue: { fontSize: 8.5, fontFamily: "AzarragaPDF-Bold" },
   grand: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -128,8 +133,8 @@ const s = StyleSheet.create({
     paddingHorizontal: 8,
     marginTop: 3,
   },
-  grandLabel: { fontSize: 10, color: "#FFFFFF", fontFamily: "Helvetica-Bold" },
-  grandValue: { fontSize: 13, color: "#FFFFFF", fontFamily: "Helvetica-Bold" },
+  grandLabel: { fontSize: 10, color: "#FFFFFF", fontFamily: "AzarragaPDF-Bold" },
+  grandValue: { fontSize: 13, color: "#FFFFFF", fontFamily: "AzarragaPDF-Bold" },
   deposit: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -141,8 +146,8 @@ const s = StyleSheet.create({
     paddingHorizontal: 8,
     marginTop: 6,
   },
-  depositLabel: { fontSize: 8.5, color: "#7A4B00", fontFamily: "Helvetica-Bold" },
-  depositValue: { fontSize: 10, color: "#7A4B00", fontFamily: "Helvetica-Bold" },
+  depositLabel: { fontSize: 8.5, color: "#7A4B00", fontFamily: "AzarragaPDF-Bold" },
+  depositValue: { fontSize: 10, color: "#7A4B00", fontFamily: "AzarragaPDF-Bold" },
 
   /* ---------- terms ---------- */
   termsBox: {
@@ -158,7 +163,7 @@ const s = StyleSheet.create({
     letterSpacing: 1.1,
     textTransform: "uppercase",
     color: BRAND,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "AzarragaPDF-Bold",
     marginBottom: 6,
   },
   termsText: { fontSize: 7.8, lineHeight: 1.55, color: "#243B55" },
@@ -167,7 +172,7 @@ const s = StyleSheet.create({
     letterSpacing: 1.1,
     textTransform: "uppercase",
     color: BRAND,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "AzarragaPDF-Bold",
     marginTop: 10,
     marginBottom: 5,
   },
@@ -208,7 +213,7 @@ export function DocumentPdf({
 }) {
   const cur = doc.currency;
   const isQuote = doc.type === "quote";
-  const logo = (settings.logoDataUrl as string | null) || null;
+  const logo = (settings.logoDataUrl as string | null) || `data:image/jpeg;base64,${readFileSync(path.join(process.cwd(), "public/azarraga-logo-mark.jpg")).toString("base64")}`;
 
   // Alternatives: only the section the owner picked (or the included one).
   const shownSections = doc.sections.filter((section) =>
