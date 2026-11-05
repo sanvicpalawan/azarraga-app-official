@@ -12,4 +12,5 @@ export type ProductSearchHit = {
   itemCode?: string;
 };
 export type ProductSearchPage = { items: ProductSearchHit[]; total: number; page: number; pageSize: number; totalPages: number };
-export type ProductSearchOptions = { q?: string; category?: string; page?: number; pageSize?: number; kind?: "all" | "source" | "catalog"; drawingsOnly?: boolean };
+export type ProductPageSize = 50 | 100 | 250 | "all";
+export type ProductSearchOptions = { q?: string; category?: string; page?: number; pageSize?: number | "all"; kind?: "all" | "source" | "catalog"; drawingsOnly?: boolean };

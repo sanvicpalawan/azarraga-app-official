@@ -2,7 +2,7 @@
 
 Every owner screen has the same product search and All / Windows / Doors / Others controls. It searches source quotations and the catalog by product details, series, glass, finish, dimensions, account, quotation number and source filename.
 
-Results are paginated: 12 products per page in the main search and libraries, six drawings per page in the drawing tools. Requests are debounced and superseded requests are cancelled. The production search filters and counts inside Postgres before selecting the page; original PDFs and off-page drawing images are not returned. Development uses the same filtering semantics against temporary local memory.
+The owner can choose 50, 100, 250 or All products in the shared search, product libraries and drawing references. The choice is remembered on that device and shared across screens. All removes page navigation and displays every matching product. Requests are debounced and superseded requests are cancelled. The production search filters and counts inside Postgres before selecting the requested number of results; original PDFs and off-page drawing images are not returned. Development uses the same filtering semantics against temporary local memory.
 
 While editing a quote or invoice, selecting a search result adds it to the active item section without navigation or discarding unsaved work. Its original drawing is snapshotted onto the line. Original source records remain unchanged, historical prices remain editable, and a price in another currency is cleared rather than relabelled.
 

@@ -1,13 +1,17 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // @napi-rs/canvas is a native binary — must not be bundled if used server-side.
-  // pdfjs-dist is intentionally NOT listed here: it needs to be bundled normally
-  // so its worker file (statically imported in lib/invoice-parser.ts) gets
-  // traced into the Vercel serverless function output.
+  // Native canvas stays external; pdfjs is bundled so its worker is traced.
   serverExternalPackages: ["@napi-rs/canvas"],
   outputFileTracingIncludes: {
-    "/api/documents/pdf": ["./public/fonts/*.ttf", "./public/azarraga-logo-mark.jpg"],
+    "/api/documents/pdf": [
+      "./public/fonts/*.ttf",
+      "./public/azarraga-logo-mark.jpg",
+      // PDFKit resolves these dynamically. Vercel's Node runtime uses the CJS
+      // exports even when the build trace has only discovered the ESM fonts.
+      "./node_modules/.pnpm/pdfkit@*/node_modules/pdfkit/js/standard-fonts/**/*",
+      "./node_modules/pdfkit/js/standard-fonts/**/*",
+    ],
   },
 };
 

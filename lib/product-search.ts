@@ -6,12 +6,12 @@ import type { ProductSearchHit, ProductSearchOptions, ProductSearchPage, Product
 const categoryOf=(name:string):ProductSearchCategory=>/door/i.test(name)?"Doors":/window/i.test(name)?"Windows":"Others";
 export function searchOptions(options:ProductSearchOptions){
  const category=["Windows","Doors","Others"].includes(options.category??"")?options.category!:"All";
- return {...options,category,page:Math.max(1,Math.floor(Number(options.page)||1)),pageSize:Math.min(48,Math.max(1,Math.floor(Number(options.pageSize)||12))),tokens:(options.q??"").slice(0,300).trim().toLowerCase().split(/\s+/).filter(Boolean)};
+ return {...options,category,all:options.pageSize==="all",page:Math.max(1,Math.floor(Number(options.page)||1)),pageSize:Math.min(250,Math.max(1,Math.floor(Number(options.pageSize)||50))),tokens:(options.q??"").slice(0,300).trim().toLowerCase().split(/\s+/).filter(Boolean)};
 }
 export function paginateProductHits(hits:ProductSearchHit[],options:ProductSearchOptions):ProductSearchPage {
  const o=searchOptions(options);const matches=hits.filter(hit=>(o.category==="All"||hit.category===o.category)&&(!o.kind||o.kind==="all"||hit.kind===o.kind)&&(!o.drawingsOnly||Boolean(hit.imageUrl))&&o.tokens.every(token=>[hit.name,hit.description,hit.series,hit.glass,hit.finish,hit.widthMm,hit.heightMm,hit.sourceName,hit.sourceFile,hit.sourceNumber].join(" ").toLowerCase().includes(token)));
- const total=matches.length,totalPages=Math.max(1,Math.ceil(total/o.pageSize)),page=Math.min(o.page,totalPages);
- return {items:matches.slice((page-1)*o.pageSize,page*o.pageSize),total,page,pageSize:o.pageSize,totalPages};
+ const total=matches.length,pageSize=o.all?Math.max(1,total):o.pageSize,totalPages=Math.max(1,Math.ceil(total/pageSize)),page=Math.min(o.page,totalPages);
+ return {items:matches.slice((page-1)*pageSize,page*pageSize),total,page,pageSize,totalPages};
 }
 
 // Filtering/counting happens in Postgres; only the selected page's original images cross the network.
@@ -38,12 +38,12 @@ export async function searchProducts(options:ProductSearchOptions):Promise<Produ
   const [catalog,projects]=await Promise.all([getCatalogSnapshot(),listProjects({includeFiles:false})]);
   const sources:ProductSearchHit[]=projects.flatMap(project=>project.items.map(item=>{const seed=historicalLineSeed(project,item);return {key:`source:${project.id}:${item.id}`,kind:"source",name:item.name,description:item.description??item.name,category:item.category,imageUrl:item.imageDataUrl??null,widthMm:seed.widthMm,heightMm:seed.heightMm,unitPrice:seed.unitPrice,currency:"PHP",unit:seed.unit,historical:true,sourceProjectId:project.id,sourceItemId:item.id,sourceName:project.clientName,sourceFile:project.fileName,sourceNumber:project.invoiceNumber,sourceDate:project.invoiceDate,reviewRequired:seed.reviewRequired,itemCode:item.itemCode,series:item.series,glass:item.glass,finish:item.color};}));
   const products:ProductSearchHit[]=catalog.products.map(product=>({key:`catalog:${product.id}`,kind:"catalog",productId:product.id,name:product.name,description:product.description,category:categoryOf(product.categoryName),imageUrl:product.imageUrl,widthMm:null,heightMm:null,unitPrice:Math.round(product.basePrice*100),currency:"PHP",unit:"set",historical:false,sourceName:null,sourceFile:null,sourceNumber:null,sourceDate:null,reviewRequired:false}));
-  return paginateProductHits([...sources,...products],o);
+  return paginateProductHits([...sources,...products],options);
  }
  await readySchema();const db=getDb();const parameters=[o.category,o.kind??"all",JSON.stringify(o.tokens),Boolean(o.drawingsOnly)];
  const counts=await db.query(`${SEARCH_CTE} select count(*)::integer as total from matches`,parameters);
- const total=Number(counts[0]?.total??0),totalPages=Math.max(1,Math.ceil(total/o.pageSize)),page=Math.min(o.page,totalPages);
- const rows=await db.query(`${SEARCH_CTE} select * from matches order by kind desc,source_project_id desc nulls last,position limit $5 offset $6`,[...parameters,o.pageSize,(page-1)*o.pageSize]);
+ const total=Number(counts[0]?.total??0),pageSize=o.all?Math.max(1,total):o.pageSize,totalPages=Math.max(1,Math.ceil(total/pageSize)),page=Math.min(o.page,totalPages);
+ const rows=await db.query(`${SEARCH_CTE} select * from matches order by kind desc,source_project_id desc nulls last,position limit $5 offset $6`,[...parameters,pageSize,(page-1)*pageSize]);
  const items:ProductSearchHit[]=rows.map(row=>{
   const payload=row.payload as Record<string,unknown>;const source=row.kind==="source";
   let units:Record<string,string>={};try{units=JSON.parse(String(row.units_json??"{}"));}catch{/* No source unit map on older records. */}
@@ -54,5 +54,5 @@ export async function searchProducts(options:ProductSearchOptions):Promise<Produ
    ...(source?{sourceProjectId:Number(row.source_project_id),sourceItemId:String(payload.id)}:{productId:Number(payload.id)}),
    sourceName:row.source_name as string|null,sourceFile:row.source_file as string|null,sourceNumber:row.source_number as string|null,sourceDate:row.source_date as string|null,reviewRequired:Boolean(row.review_required),series:payload.series as string|undefined,glass:payload.glass as string|undefined,finish:payload.color as string|undefined,itemCode:payload.itemCode as string|undefined};
  });
- return {items,total,page,pageSize:o.pageSize,totalPages};
+ return {items,total,page,pageSize,totalPages};
 }
