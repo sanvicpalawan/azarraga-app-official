@@ -1,11 +1,13 @@
 /* eslint-disable react-hooks/set-state-in-effect, react-hooks/refs, react/no-unescaped-entities, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-expressions */
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
-  BLUE, CATALOG, GRID_OPTIONS, INK, PRESETS, SPEC_OPTIONS, SYMBOLS, TEMPLATES, UNIT_LABEL, blankDesign, buildDescription, clamp, defaultSpec, designToSvg,
+  BLUE, CATALOG, GRID_OPTIONS, INK, SPEC_OPTIONS, SYMBOLS, TEMPLATES, UNIT_LABEL, blankDesign, buildDescription, clamp, defaultSpec, designToSvg,
   formatLength, parseLength, rescale, shapeMarkup, splitRect, svgToPngDataUrl, symbolMarkup, uid,
-  type Design, type Preset, type Section, type Shape, type Spec, type Sym, type Template, type Unit,
+  type Design, type Section, type Shape, type Spec, type Sym, type Template, type Unit,
 } from './designer-core';
 import { apiStore, type DesignStore } from './designStore';
+import DesignerSources from './DesignerSources';
+import type { FinishedProject, FinishedProjectItem } from '@/lib/catalog-types';
 
 type Tool = 'select' | 'rect' | 'arch' | 'line' | 'arrow' | 'text';
 type Snap = { w: number; h: number; shapes: Shape[] };
@@ -14,6 +16,9 @@ type Drag = { mode: 'move' | 'resize' | 'create'; id: string; orig: Shape; start
 export interface DesignerScreenProps {
   store?: DesignStore;
   initial?: Design;
+  /** Original invoice crop, kept separate from the editable drawing canvas. */
+  referenceImage?: string;
+  onUseSource?: (project: FinishedProject, item: FinishedProjectItem) => void;
   /** Called with the design and a transparent PNG data URL when the user taps "Use in quote". */
   onUseInQuote?: (design: Design, png: string) => void;
   /** Refreshes the shared catalog after an owner-designed product is published. */
@@ -41,7 +46,7 @@ function LengthField({ label, value, placeholder, onCommit }: { label: string; v
   );
 }
 
-export default function DesignerScreen({ store = apiStore, initial, onUseInQuote, onProductSaved }: DesignerScreenProps) {
+export default function DesignerScreen({ store = apiStore, initial, referenceImage, onUseSource, onUseInQuote, onProductSaved }: DesignerScreenProps) {
   const initialId = useId();
   const [design, setDesign] = useState<Design>(() => initial ?? blankDesign(initialId));
   useEffect(() => {
@@ -56,6 +61,8 @@ export default function DesignerScreen({ store = apiStore, initial, onUseInQuote
   const [tool, setTool] = useState<Tool>('select');
   const [grid, setGrid] = useState(50);
   const [dirty, setDirty] = useState(false);
+  const [sourceReference,setSourceReference]=useState<string>();
+  const activeReference=sourceReference??referenceImage;
   const [lib, setLib] = useState<Design[] | null>(null);
   const [toast, setToast] = useState('');
   const [splitN, setSplitN] = useState(2);
@@ -104,12 +111,10 @@ export default function DesignerScreen({ store = apiStore, initial, onUseInQuote
   };
   const applyTemplate = (t: Template) => {
     snapshot();
-    setDesign((d) => ({ ...d, widthMm: t.w, heightMm: t.h, shapes: t.build(t.w, t.h), section: t.cat, type: t.type ?? '', series: '', spec: d.section === t.cat ? d.spec : defaultSpec(t.cat) }));
-    setSel(null); setTool('select');
-  };
-  const applyPreset = (p: Preset) => {
-    const t = TEMPLATES.find((x) => x.key === p.tpl)!; snapshot();
-    setDesign((d) => ({ ...d, code: p.code, name: p.name, description: p.desc, section: p.section, type: p.type, series: p.series, spec: defaultSpec(p.section), widthMm: p.w, heightMm: p.h, shapes: t.build(p.w, p.h) }));
+    setDesign((d) => {
+      const w = onUseInQuote ? d.widthMm : t.w, h = onUseInQuote ? d.heightMm : t.h;
+      return { ...d, widthMm: w, heightMm: h, shapes: t.build(w, h), section: t.cat, type: t.type ?? '', series: '', spec: d.section === t.cat ? d.spec : defaultSpec(t.cat) };
+    });
     setSel(null); setTool('select');
   };
   const changeSize = (nw: number, nh: number) => {
@@ -118,7 +123,7 @@ export default function DesignerScreen({ store = apiStore, initial, onUseInQuote
   };
   const commitSize = (axis: 'w' | 'h', text: string): boolean => {
     const mm = parseLength(text, unit);
-    if (mm === null || mm < 200 || mm > 12000) { flash(`Couldn't read that size. Try 1.15, 1150 or 3' 7 1/2"`); return false; }
+    if (mm === null || mm < 1 || mm > 100000) { flash(`Couldn't read that size. Enter a size between 1 mm and 100 m.`); return false; }
     if (axis === 'w') changeSize(mm, dref.current.heightMm); else changeSize(dref.current.widthMm, mm);
     return true;
   };
@@ -203,7 +208,7 @@ export default function DesignerScreen({ store = apiStore, initial, onUseInQuote
   // ---------- save / library / export ----------
   const fname = (design.code || design.name || 'design').trim().replace(/[^\w-]+/g, '_');
   const download = (href: string, name: string) => { const a = document.createElement('a'); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove(); };
-  const symbolSvg = () => designToSvg(dref.current, { px: 800, style: 'invoice', tone: dref.current.section === 'Doors' ? 'grey' : 'blue', dims: dimsOn, fmt });
+  const symbolSvg = () => designToSvg(dref.current, { px: 800, style: 'invoice', sw: 12, tone: dref.current.section === 'Doors' ? 'grey' : 'blue', dims: dimsOn, fmt });
   const saveOpenProduct = async () => {
     const d: Design = { ...dref.current, name: dref.current.name.trim() || 'Untitled design', updatedAt: new Date().toISOString() };
     const png = await svgToPngDataUrl(symbolSvg(), 2);
@@ -232,7 +237,6 @@ export default function DesignerScreen({ store = apiStore, initial, onUseInQuote
 
   const thumb = (w: number, h: number, shapes: Shape[], sec: Section, px = 110) => designToSvg({ widthMm: w, heightMm: h, shapes }, { px, style: 'invoice', tone: sec === 'Doors' ? 'grey' : 'blue', sw: 2 });
   const tplThumbs = useMemo(() => TEMPLATES.map((t) => ({ t, svg: thumb(t.w, t.h, t.build(t.w, t.h), t.cat) })), []);
-  const presetThumbs = useMemo(() => PRESETS.map((p) => ({ p, svg: thumb(p.w, p.h, TEMPLATES.find((x) => x.key === p.tpl)!.build(p.w, p.h), p.section) })), []);
   const hr = big * 0.022;
   const cursor = tool === 'select' ? 'default' : 'crosshair';
 
@@ -289,18 +293,15 @@ export default function DesignerScreen({ store = apiStore, initial, onUseInQuote
 
       <div className="dz-body">
         <aside className="dz-left">
-          <section className="dz-card">
-            <h3>From your quotation</h3>
-            <div className="dz-tpl">
-              {presetThumbs.map(({ p, svg }) => (
-                <button key={p.code} className="dz-t" onClick={() => applyPreset(p)} title={p.desc}>
-                  <span dangerouslySetInnerHTML={{ __html: svg }} /><em><b>{p.code}</b> · {fmt(p.w)} × {fmt(p.h)}</em>
-                </button>))}
-            </div>
-          </section>
+          <DesignerSources onUseSource={onUseSource} onReference={item=>{
+            if(dirty&&!window.confirm('Start from this source reference? Unapplied canvas changes will be replaced.'))return;
+            const next=blankDesign();
+            snapshot();setDesign({...next,name:item.name,code:onUseInQuote?design.code:item.itemCode??'',description:item.description??item.name,widthMm:item.widthM?Math.round(item.widthM*1000):next.widthMm,heightMm:item.heightM?Math.round(item.heightM*1000):next.heightMm,shapes:[],section:item.category,series:item.series??'',spec:defaultSpec(item.category)});
+            setSourceReference(item.imageDataUrl);setSel(null);setTool('select');
+          }}/>
           {(['Windows', 'Doors', 'Others'] as const).map((cat) => (
             <section key={cat} className="dz-card">
-              <h3>{cat} — start from</h3>
+              <h3>{cat} — editable templates</h3>
               <div className="dz-tpl">
                 {tplThumbs.filter((x) => x.t.cat === cat).map(({ t, svg }) => (
                   <button key={t.key} className="dz-t" onClick={() => applyTemplate(t)} title={t.name}>
@@ -350,6 +351,12 @@ export default function DesignerScreen({ store = apiStore, initial, onUseInQuote
         </main>
 
         <aside className="dz-right">
+          {activeReference && <section className="dz-card">
+            <h3>Original item drawing</h3>
+            {/* eslint-disable-next-line @next/next/no-img-element -- saved invoice drawing, never an inferred replacement */}
+            <img src={activeReference} alt="Original quoted product drawing" style={{width:'100%',height:150,objectFit:'contain',background:'#fff'}} />
+            <p className="dz-mute">Use this as your reference. The canvas is editable; applying it replaces the item image. Check the panels and opening directions before applying.</p>
+          </section>}
           <section className="dz-card">
             <h3>{selShape ? (isPanel ? `Panel · ${dimText(selShape)}` : selShape.t === 'text' ? 'Label' : 'Line') : 'Selection'}</h3>
             {!selShape && <p className="dz-mute">Select a panel to change what it does, split it, or delete it.</p>}
@@ -424,7 +431,7 @@ export default function DesignerScreen({ store = apiStore, initial, onUseInQuote
               <button className="dz-b" onClick={exportSvg}>Download SVG</button>
             </div>
             {onUseInQuote && <button className="dz-b pri full" onClick={useInQuote}>Use in quote</button>}
-            <p className="dz-mute">Saving or downloading creates an Open Product at the beginning of Choose Product, in this Library, and in Admin Products.</p>
+            <p className="dz-mute">{onUseInQuote ? 'Use in quote attaches this drawing to the current item. Save the quotation to keep your changes.' : 'Save to Products adds this design to your reusable product library.'}</p>
           </section>
         </aside>
       </div>
@@ -549,4 +556,12 @@ const CSS = `
  .dz-grid{margin-left:0;flex:1 0 100%}
  .dz-acts .dz-b{flex:1 1 auto;padding:10px 8px}
 }
+.dz-source-search{width:100%;min-width:0;box-sizing:border-box;padding:8px;margin-bottom:7px;border:1px solid #cbd8e6;background:#fff;color:#163654;border-radius:4px;font-size:11px}
+.dz-source-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.dz-source-thumb{min-width:0;padding:5px;border:1px solid #d5e0ed;background:white;cursor:pointer;color:#163654;display:grid;gap:3px;text-align:center}
+.dz-source-thumb img{width:100%;height:64px;object-fit:contain}.dz-source-thumb span{font-size:10px;font-weight:bold;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dz-source-thumb small{font-size:9px}
+.dz-source-pages{display:flex;align-items:center;justify-content:space-between;gap:5px;margin-top:8px;font-size:10px}.dz-source-pages .dz-b{padding:4px 8px}
+.dz-source-selected{padding-top:10px;margin-top:10px;border-top:1px solid #d5e0ed;font-size:11px;overflow-wrap:anywhere}.dz-source-selected p{line-height:1.5}.dz-source-selected .dz-b{margin-bottom:6px;white-space:normal}
+.dz-source-links{display:flex;gap:5px;flex-wrap:wrap}.dz-source-links a{text-decoration:none}.dz-source-all{display:block;margin-top:9px;color:#0f4c81;font-size:11px}
+@media(max-width:1200px){.dz-left .dz-source-card{width:min(470px,calc(100vw - 80px));flex-shrink:0}.dz-source-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.dz-source-selected{max-width:100%}}
 `;

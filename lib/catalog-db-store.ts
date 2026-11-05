@@ -630,10 +630,13 @@ function createDbBackend(): CatalogBackend {
       };
     },
 
-    async listProjects(): Promise<FinishedProject[]> {
+    async listProjects(options?: {includeFiles?:boolean}): Promise<FinishedProject[]> {
       await readySchema();
       const rows = await getDb()`
-        select * from finished_projects
+        select id, project_name, client_name, project_address, invoice_number, invoice_date,
+          total_amount, file_name, file_type, file_size,
+          case when ${options?.includeFiles !== false} then file_data else '' end as file_data,
+          items, notes, status, created_at, updated_at from finished_projects
         order by updated_at desc, id desc`;
       return rows.map((row: Row) => mapProject(row));
     },

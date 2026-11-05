@@ -1,4 +1,4 @@
-import { computeDocument, computeLine } from "./calc";
+import { computeDocument, computeLine, paymentStatus } from "./calc";
 import { calcInputFrom, type ClientDraft, type DocumentDraft, type DocumentGraph, type Settings } from "./documents";
 import { formatDocumentNumber } from "./describe";
 import type { Client, Payment } from "./db/schema";
@@ -45,7 +45,7 @@ export function memoryWrite(draft: DocumentDraft, settings: Settings, id?: strin
   const issueDate = draft.issueDate ?? new Date().toISOString().slice(0, 10);
   const doc: DocumentGraph = {
     id: docId, type, number: current?.number ?? draft.forcedNumber ?? memoryNumber(type, settings, new Date().getFullYear(), true),
-    revision: current?.revision ?? 0, status: current?.status ?? "draft", clientId,
+    revision: current?.revision ?? 0, status: current && type === "invoice" && current.status !== "void" ? paymentStatus(totals.total,current.amountPaid) : current?.status ?? draft.status ?? (type === "invoice" ? "unpaid" : "draft"), clientId,
     projectName: draft.projectName ?? null, projectAddress: draft.projectAddress ?? null,
     issueDate, dueDate: draft.dueDate ?? null, currency: current?.currency ?? draft.currency ?? settings.currency,
     ...source, subtotal: totals.subtotal, discountAmount: totals.discountAmount,

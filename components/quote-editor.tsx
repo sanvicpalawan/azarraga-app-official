@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { Copy, Plus, Save, Send, Sparkles, Trash2, X } from "lucide-react";
 import { computeDocument, computeLine, computeAlternatives } from "@/lib/calc";
@@ -11,12 +12,23 @@ import type { CategoryWithPrefix, CatalogItem, SpecGroup } from "@/lib/spec-opti
 import type { DocumentGraph, Settings } from "@/lib/documents";
 import type { Client } from "@/lib/db/schema";
 import type { Product } from "@/lib/catalog-types";
+import DesignerScreen from "@/components/designer/DesignerScreen";
+import { blankDesign, buildDescription, rescale, type Design } from "@/components/designer/designer-core";
+import { readQuoteDrawing, snapshotQuoteDrawing, quoteDrawingSize } from "@/lib/quote-drawing";
+import { historicalLineSeed, type HistoricalLineSeed } from "@/lib/historical-line";
+import { PRODUCT_SELECTED_EVENT, type ProductSearchHit } from "@/lib/product-search-types";
+import { snapshotProductImage, sourceReference } from "@/lib/product-search-selection";
+import "@/components/studio-source-library.css";
+const StudioSourceLibrary=dynamic(()=>import("@/components/studio-source-library").then(module=>module.StudioSourceLibrary));
 
 /* ------------------------------------------------------------------ */
 /* Local shapes                                                        */
 /* ------------------------------------------------------------------ */
 
 interface LineState {
+  codeOverride?: string;
+  designJson?: Record<string,unknown> | null;
+  designSvg?: string | null;
   productId?: number | null;
   key: string;
   saved?: NonNullable<DocumentGraph["sections"]>[number]["lines"][number];
@@ -96,6 +108,8 @@ export function QuoteEditor({
   initialCustomerId,
   initialProduct,
   initialDescription,
+  initialHistoricalLine,
+  initialDocumentType = "quote",
 }: {
   document?: DocumentGraph | null;
   specGroups: SpecGroup[];
@@ -106,10 +120,13 @@ export function QuoteEditor({
   initialCustomerId?: string;
   initialProduct?: Product;
   initialDescription?: string;
+  initialHistoricalLine?: HistoricalLineSeed;
+  initialDocumentType?: "quote" | "invoice";
 }) {
   const router = useRouter();
   const isEdit = Boolean(doc);
-  const snapshot = { currency: doc?.currency ?? settings.currency, vatMode: doc?.vatMode ?? settings.vatMode, vatRate: Number(doc?.vatRate ?? settings.vatRate) };
+  const documentType = doc?.type ?? initialDocumentType;
+  const snapshot = { currency: doc?.currency ?? initialHistoricalLine?.currency ?? (initialProduct ? "PHP" : settings.currency), vatMode: doc?.vatMode ?? settings.vatMode, vatRate: Number(doc?.vatRate ?? settings.vatRate) };
 
   const firstPrefix = categories[0]?.codePrefix || "W";
   const today = new Date().toISOString().slice(0, 10);
@@ -147,7 +164,12 @@ export function QuoteEditor({
   );
   const [sections, setSections] = useState<SectionState[]>(() => {
     if (!doc?.sections?.length) {
-      return [{ key: "s0", title: "", kind: "included", lines: [{ ...blankLine(firstPrefix), productId: initialProduct?.id, description: initialProduct ? `${initialProduct.name}${initialProduct.description ? `, ${initialProduct.description}` : ""}` : initialDescription ?? "", manualDescription: Boolean(initialProduct || initialDescription) }] }];
+      if (initialHistoricalLine) return [{key:"s0",title:"",kind:"included",lines:[{
+        ...blankLine(initialHistoricalLine.codePrefix),description:initialHistoricalLine.description,manualDescription:true,
+        widthM:formatMeasurement(initialHistoricalLine.widthMm,"m"),heightM:formatMeasurement(initialHistoricalLine.heightMm,"m"),
+        quantity:"1",unit:initialHistoricalLine.unit,unitPrice:String(initialHistoricalLine.unitPrice/100),designJson:initialHistoricalLine.designJson,
+      }]}];
+      return [{ key: "s0", title: "", kind: "included", lines: [{ ...blankLine(initialProduct ? /door/i.test(initialProduct.categoryName)?"D":/window/i.test(initialProduct.categoryName)?"W":"O" : firstPrefix), productId: initialProduct?.id, unitPrice:initialProduct?String(initialProduct.basePrice):"", description: initialProduct ? `${initialProduct.name}${initialProduct.description ? `, ${initialProduct.description}` : ""}` : initialDescription ?? "", manualDescription: Boolean(initialProduct || initialDescription) }] }];
     }
     return doc.sections.map((s, i) => ({
       key: s.id,
@@ -162,6 +184,8 @@ export function QuoteEditor({
         return {
           key: l.id,
           saved: l,
+          codeOverride:l.code ?? undefined,
+          designJson:l.designJson,designSvg:l.designSvg,
           selected,
           measurementUnit: (["m", "mm", "ft-in"].includes(l.inputUnit) ? l.inputUnit : "m") as MeasurementUnit, pricingMode: l.pricingMode, areaUnit: l.areaUnit, minArea: Number(l.minArea), unit: l.unit, options: l.options ?? [],
           description: l.description,
@@ -177,8 +201,38 @@ export function QuoteEditor({
   });
 
   const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(initialHistoricalLine ? `${initialHistoricalLine.reviewRequired ? "OWNER REVIEW REQUIRED: the source document has a disputed total. " : ""}Original drawing and dimensions copied. The price is historical; confirm it before sending a new quote. Quantity starts at one.` : null);
   const [busy, setBusy] = useState(false);
+  const [drawingEditor,setDrawingEditor]=useState<{sectionKey:string;lineKey:string;initial:Design}|null>(null);
+  const [drawingDescription,setDrawingDescription]=useState(true);
+  const [drawingError,setDrawingError]=useState("");
+  const [sourceSelector,setSourceSelector]=useState<string|null>(null);
+  const activeDrawingLine=drawingEditor ? sections.find(s=>s.key===drawingEditor.sectionKey)?.lines.find(l=>l.key===drawingEditor.lineKey) : undefined;
+  const referencePng=activeDrawingLine?.designJson?.referencePng ?? activeDrawingLine?.designJson?.previewPng;
+  const activeSectionRef=useRef<string|null>(null);
+  useEffect(()=>{
+    if(doc||initialHistoricalLine||!initialProduct?.imageUrl)return;
+    let active=true;
+    snapshotProductImage(initialProduct.imageUrl).then(image=>{
+      if(active)setSections(previous=>previous.map(section=>({...section,lines:section.lines.map(line=>line.productId===initialProduct.id&&!line.designJson?{...line,designJson:{previewPng:image,sourceProductId:initialProduct.id}}:line)})));
+    }).catch(error=>{if(active)setNotice(error instanceof Error?error.message:"Could not load the catalog drawing.");});
+    return()=>{active=false;};
+  },[doc,initialHistoricalLine,initialProduct]);
+  useEffect(()=>{
+    const choose=async(event:Event)=>{
+      const hit=(event as CustomEvent<ProductSearchHit>).detail;
+      if(!hit||!["source","catalog"].includes(hit.kind))return;
+      try{
+        const source=hit.kind==="source"?sourceReference(hit):null;
+        const seed=source?historicalLineSeed(source.project,source.item):null;
+        const image=hit.imageUrl?await snapshotProductImage(hit.imageUrl):undefined;
+        const next:LineState={...blankLine(hit.category==="Doors"?"D":hit.category==="Windows"?"W":"O"),productId:hit.productId,description:hit.description||hit.name,manualDescription:true,widthM:formatMeasurement(hit.widthMm,"m"),heightM:formatMeasurement(hit.heightMm,"m"),unit:hit.unit,unitPrice:hit.currency===snapshot.currency?String((hit.unitPrice??0)/100):"",designJson:seed?{...seed.designJson,...(image?{previewPng:image,referencePng:image}:{})}:image?{previewPng:image,sourceProductId:hit.productId}:null};
+        setSections(previous=>{const key=previous.some(section=>section.key===activeSectionRef.current)?activeSectionRef.current:previous[0]?.key;return previous.map(section=>section.key===key?{...section,lines:section.lines.length===1&&!section.lines[0].description&&!section.lines[0].widthM&&!section.lines[0].unitPrice?[next]:[...section.lines,next]}:section);});
+        setNotice(`${hit.reviewRequired?"OWNER REVIEW REQUIRED. ":""}Product added. ${hit.currency===snapshot.currency?"Confirm the price before sending.":`Enter the price in ${snapshot.currency}; the source price is ${hit.currency}.`}`);
+      }catch(error){setNotice(error instanceof Error?error.message:"Could not add the selected product.");}
+    };
+    window.addEventListener(PRODUCT_SELECTED_EVENT,choose);return()=>window.removeEventListener(PRODUCT_SELECTED_EVENT,choose);
+  },[snapshot.currency]);
 
   /* ---------------- line helpers ---------------- */
 
@@ -251,7 +305,7 @@ export function QuoteEditor({
         s.key === sKey
           ? {
               ...s,
-              lines: [...s.lines, { ...line, key: newLineKey(), saved: line.saved ? { ...line.saved, id: "" } : undefined, manualDescription: true }],
+              lines: [...s.lines, { ...line, codeOverride:undefined, key: newLineKey(), saved: line.saved ? { ...line.saved, id: "" } : undefined, manualDescription: true }],
             }
           : s,
       ),
@@ -333,7 +387,7 @@ export function QuoteEditor({
       ...s,
       lines: s.lines.map((l) => {
         const prefix = l.codePrefix || "";
-        const code = nextItemCode(prefix, seen[prefix] ?? []);
+        const code = l.codeOverride?.trim() || nextItemCode(prefix, seen[prefix] ?? []);
         seen[prefix] = [...(seen[prefix] ?? []), code];
         return { ...l, code };
       }),
@@ -343,7 +397,7 @@ export function QuoteEditor({
   /* ---------------- persistence ---------------- */
 
   const buildDraft = () => ({
-    type: "quote" as const,
+    type: documentType,
     client: {
       id: client.id,
       name: client.name.trim(),
@@ -387,8 +441,8 @@ export function QuoteEditor({
             glass: l.saved?.glass ?? null,
             finish: l.saved?.finish ?? null,
             notes: l.saved?.notes ?? null,
-            designJson: l.saved?.designJson ?? null,
-            designSvg: l.saved?.designSvg ?? null,
+            designJson: l.designJson ?? l.saved?.designJson ?? null,
+            designSvg: l.designSvg ?? l.saved?.designSvg ?? null,
             lengthMm: l.saved?.lengthMm ?? null,
             itemId: l.saved?.itemId ?? items.find((i) => i.name === l.description.split(",")[0])?.id ?? null,
             code: l.code,
@@ -418,6 +472,8 @@ export function QuoteEditor({
       return error ? `Line ${i + 1}: ${error}` : null;
     }).find(Boolean);
     if (invalid) { setNotice(invalid); return false; }
+    const staleDrawing=sections.flatMap(s=>s.lines).find(line=>{const drawing=quoteDrawingSize(line.designJson);return drawing&&(drawing.widthMm!==parseMeasurement(line.widthM,line.measurementUnit)||drawing.heightMm!==parseMeasurement(line.heightM,line.measurementUnit));});
+    if(staleDrawing){setNotice("An item size changed. Edit its drawing and use it in the quote again so the printed image matches the dimensions.");return false;}
     const empty = sections.some((s) => s.lines.length === 0);
     if (empty) {
       setNotice("Every section needs at least one line - or remove the section.");
@@ -445,7 +501,7 @@ export function QuoteEditor({
         });
         if (!res.ok) throw new Error((await res.json()).error ?? "Save failed");
         const { id } = await res.json();
-        router.push(`/quotes/${id}`);
+        router.push(`/${documentType === "invoice" ? "invoices" : "quotes"}/${id}`);
         return true;
       }
       return true;
@@ -491,6 +547,35 @@ export function QuoteEditor({
 
   return (
     <div className="editor-grid">
+      {sourceSelector && <div className="quote-drawing-modal" role="dialog" aria-modal="true" aria-label="Choose a Studio product"><div className="quote-drawing-dialog sl-workspace">
+        <div className="page-head"><h2>Add from Design Studio</h2><button type="button" className="btn" onClick={()=>setSourceSelector(null)}>Back to {documentType}</button></div>
+        <StudioSourceLibrary selectionLabel={`Add to ${documentType}`} onUse={(project,item)=>{
+          const seed=historicalLineSeed(project,item);
+          const next:LineState={...blankLine(seed.codePrefix),description:seed.description,manualDescription:true,widthM:formatMeasurement(seed.widthMm,"m"),heightM:formatMeasurement(seed.heightMm,"m"),quantity:"1",unit:seed.unit,unitPrice:seed.currency===snapshot.currency?String(seed.unitPrice/100):"",designJson:seed.designJson};
+          setSections(current=>current.map(section=>section.key===sourceSelector?{...section,lines:section.lines.length===1&&!section.lines[0].description&&!section.lines[0].widthM&&!section.lines[0].unitPrice?[next]:[...section.lines,next]}:section));
+          setNotice(`${seed.reviewRequired?"OWNER REVIEW REQUIRED. ":""}Product added with its original drawing and size. ${seed.currency===snapshot.currency?"Confirm the historical price before sending.":`The source price is PHP; enter the new price in ${snapshot.currency}.`}`);
+          setSourceSelector(null);
+        }}/>
+      </div></div>}
+      {drawingEditor && <div className="quote-drawing-modal" role="dialog" aria-modal="true" aria-label="Product drawing">
+        <div className="quote-drawing-dialog"><div className="page-head"><div><h2>Product drawing · {drawingEditor.initial.code}</h2><p className="page-sub">Set the panel arrangement, opening directions, size and specifications. Use in quote attaches this drawing to this line.</p></div><button className="btn" onClick={()=>{if(window.confirm("Close the drawing without applying changes to the quotation?"))setDrawingEditor(null);}}>Cancel drawing</button></div>
+          <label className="inline-note" style={{display:"flex",gap:8,marginBottom:16}}><input type="checkbox" checked={drawingDescription} onChange={e=>setDrawingDescription(e.target.checked)}/>Update the item description from these drawing specifications</label>
+          {drawingError && <p role="alert">{drawingError}</p>}
+          <DesignerScreen key={drawingEditor.lineKey} initial={drawingEditor.initial} referenceImage={typeof referencePng === "string" ? referencePng : undefined} onUseSource={(project,item)=>{
+            const seed=historicalLineSeed(project,item);
+            const current=activeDrawingLine;
+            if(!current)return;
+            updateLine(drawingEditor.sectionKey,drawingEditor.lineKey,{designJson:seed.designJson,designSvg:null,description:seed.description,manualDescription:true,widthM:formatMeasurement(seed.widthMm,current.measurementUnit),heightM:formatMeasurement(seed.heightMm,current.measurementUnit),unit:seed.unit,unitPrice:seed.currency===snapshot.currency?String(seed.unitPrice/100):"",pricingMode:"per_unit",selected:{},options:[]});
+            setDrawingEditor(null);setNotice(`${seed.reviewRequired?"OWNER REVIEW REQUIRED. ":""}Original drawing and product details applied. Confirm the historical price, then save your ${documentType}.`);
+          }} onUseInQuote={(design,png)=>{
+            try { const drawing=snapshotQuoteDrawing({...design,description:drawingDescription?buildDescription(design):design.description},png);
+              const current=sections.find(s=>s.key===drawingEditor.sectionKey)?.lines.find(l=>l.key===drawingEditor.lineKey);
+              if(!current)return;
+              updateLine(drawingEditor.sectionKey,drawingEditor.lineKey,{designJson:{...current.designJson,...drawing.designJson},designSvg:drawing.designSvg,description:drawing.description,manualDescription:true,widthM:formatMeasurement(drawing.widthMm,current.measurementUnit),heightM:formatMeasurement(drawing.heightMm,current.measurementUnit)});
+              setDrawingEditor(null);setNotice("Product drawing attached. Save the quotation to keep it with this item.");
+            }catch(error){setDrawingError((error as Error).message);}
+          }}/>
+        </div></div>}
       <div className="editor__main">
         {/* ---------------- customer ---------------- */}
         <section className="card">
@@ -569,6 +654,7 @@ export function QuoteEditor({
           return (
             <section
               key={section.key}
+              onFocusCapture={()=>{activeSectionRef.current=section.key;}}
               className={`section-card${isAlternative ? " section-card--alternative" : ""}${
                 chosen ? " section-card--chosen" : ""
               }`}
@@ -580,6 +666,7 @@ export function QuoteEditor({
                     : "Items"}
                 </h3>
                 <div className="spacer" style={{ flex: 1 }} />
+                <button type="button" className="btn btn--sm" onClick={()=>setSourceSelector(section.key)}><Plus size={14}/>Add from Studio</button>
                 {isAlternative && (
                   <>
                     <button
@@ -632,6 +719,17 @@ export function QuoteEditor({
                   const sqft = calculated.widthMm && calculated.heightMm ? (calculated.widthMm * calculated.heightMm / 92903.04).toFixed(2) : "—";
                   return (
                     <div className="line-row" key={line.key}>
+                      <div className="quote-line-drawing">
+                        {typeof line.designJson?.previewPng==="string" ? <img src={line.designJson.previewPng} alt={`Product drawing ${code}`} /> : <div className="quote-drawing-empty">No drawing attached</div>}
+                        <div><strong>{code} · Product drawing</strong><p className="page-sub">The saved drawing appears with this item in the quotation and invoice.</p><button type="button" className="btn" onClick={()=>{
+                          const existing=readQuoteDrawing(line.designJson??line.saved?.designJson);
+                          const base=existing??{...blankDesign(),...(line.designJson?.sourceProjectId ? {shapes:[]} : {}),section:line.codePrefix==="D"?"Doors" as const:line.codePrefix==="O"?"Others" as const:"Windows" as const};
+                          const initial=rescale(base,parseMeasurement(line.widthM,line.measurementUnit)??base.widthMm,parseMeasurement(line.heightM,line.measurementUnit)??base.heightMm);
+                          setDrawingDescription(!line.manualDescription);
+                          setDrawingError("");
+                          setDrawingEditor({sectionKey:section.key,lineKey:line.key,initial:{...initial,code,description:line.description}});
+                        }}>{line.designJson?"Edit drawing":"Draw product"}</button></div>
+                      </div>
                       <div className="option-pick" style={{ marginBottom: 9 }}>
                         <span className="line-code">{code}</span>
                         {specGroups.map((group) => {
@@ -732,6 +830,7 @@ export function QuoteEditor({
                             <option value="set">Per {line.unit}</option><option value="sqft">Per square foot</option><option value="sqm">Per square metre</option>
                           </select>
                         </Field>
+                        <Field label="Unit"><input aria-label="Item unit" value={line.unit} onChange={e=>updateLine(section.key,line.key,{unit:e.target.value})} placeholder="set, pc, LM, LS"/></Field>
                         <Field label={`Rate / ${line.pricingMode === "per_unit" ? line.unit : line.areaUnit}`}>
                           <div className="money-input">
                             <input
@@ -747,6 +846,7 @@ export function QuoteEditor({
                       </div>
 
                       <div className="line-row__foot">
+                        <input aria-label="Item code" value={line.codeOverride ?? code} onChange={e=>updateLine(section.key,line.key,{codeOverride:e.target.value})} style={{maxWidth:180}}/>
                         <select
                           value={line.codePrefix}
                           onChange={(e) =>
@@ -1018,9 +1118,9 @@ export function QuoteEditor({
 
         <div className="sticky-save">
           <button type="button" className="btn btn--primary" onClick={() => void save()} disabled={saving || busy}>
-            <Save size={16} /> {saving ? "Saving..." : isEdit ? "Save quote" : "Save & review"}
+            <Save size={16} /> {saving ? "Saving..." : isEdit ? `Save ${documentType}` : "Save & review"}
           </button>
-          {isEdit && (
+          {isEdit && documentType === "quote" && (
             <button
               type="button"
               className="btn"
@@ -1031,10 +1131,10 @@ export function QuoteEditor({
               <Copy size={16} />
             </button>
           )}
-          {isEdit && doc?.status === "sent" && (["accepted", "rejected"] as const).map((status) => (
+          {isEdit && documentType === "quote" && doc?.status === "sent" && (["accepted", "rejected"] as const).map((status) => (
             <button key={status} type="button" className="btn" disabled={busy || saving} onClick={() => action({ action: "status", status })}>Mark {status}</button>
           ))}
-          {isEdit && doc?.status === "draft" && (
+          {isEdit && documentType === "quote" && doc?.status === "draft" && (
             <button
               type="button"
               className="btn"

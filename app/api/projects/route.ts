@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { listProjects, saveProject } from "@/lib/catalog-store";
+import { listProjectSummaries } from "@/lib/project-summaries";
 
 export const dynamic = "force-dynamic";
 
@@ -46,9 +47,10 @@ const projectInputSchema = z.object({
   status: z.enum(["completed", "archived", "in_progress", "historical"]).default("historical"),
 });
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const projects = await listProjects();
+    if(new URL(request.url).searchParams.get("summary")==="1")return NextResponse.json({sources:await listProjectSummaries()});
+    const projects = await listProjects({includeFiles:new URL(request.url).searchParams.get("includeFiles") !== "0"});
     return NextResponse.json({ projects });
   } catch (error) {
     console.error("Unable to list finished projects", error);

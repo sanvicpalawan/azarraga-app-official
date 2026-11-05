@@ -165,8 +165,8 @@ export async function getOverview(): Promise<Overview> {
   return getStore().getOverview();
 }
 
-export async function listProjects(): Promise<FinishedProject[]> {
-  return getStore().listProjects();
+export async function listProjects(options?: {includeFiles?:boolean}): Promise<FinishedProject[]> {
+  return getStore().listProjects(options);
 }
 
 export async function getProject(id: number): Promise<FinishedProject | undefined> {

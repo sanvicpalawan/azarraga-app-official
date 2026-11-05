@@ -1,9 +1,6 @@
 "use client";
-import { useState } from "react";
 import Link from "next/link";
-import type { Catalog } from "@/lib/catalog-types";
-export function CatalogBrowser({ catalog }: { catalog: Catalog }) {
-  const [category,setCategory]=useState("All");const [search,setSearch]=useState("");
-  const products=catalog.products.filter(p=>(category==="All"||p.categoryName===category)&&`${p.name} ${p.description}`.toLowerCase().includes(search.toLowerCase()));
-  return <><div className="page-head"><div><h1>Product catalog</h1><p className="page-sub">Choose a product, then add its dimensions and price to one quotation.</p></div><div className="spacer"/><Link href="/quotes/new" className="btn btn--primary">New quotation</Link></div><div className="catalog-tools"><label className="field search-box">Search products<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Windows, sliding doors, glass…"/></label><div className="category-tabs">{["All",...catalog.categories.map(c=>c.name)].map(name=><button key={name} className={category===name?"active":""} onClick={()=>setCategory(name)}>{name}</button>)}</div></div><div className="catalog-summary"><strong>{products.length} products</strong><Link href="/admin/catalog?tab=products" className="btn">Manage products</Link></div><div className="product-grid">{products.map(p=><article className="product-card" key={p.id}>{p.imageUrl?<img src={p.imageUrl} alt={p.name} style={{width:"100%",height:160,objectFit:"contain"}}/>:<div className="product-picture" style={{height:160}}>Drawing available in Design Studio</div>}<div style={{padding:16}}><small>{p.categoryName}</small><h2>{p.name}</h2><p>{p.description}</p><Link className="btn btn--primary" href={`/quotes/new?product=${p.id}`}>Use in quotation</Link></div></article>)}</div>{!products.length&&<div className="empty-state"><h2>No matching products</h2><p>Add your real products in Administration or create a custom quotation.</p><Link className="btn" href="/quotes/new">Create custom quotation</Link></div>}</>;
+import { ProductFinder } from "./product-finder";
+export function CatalogBrowser(){
+ return <><div className="page-head"><div><h1>Product library</h1><p className="page-sub">Find real quotation products and catalog products. Review the price for each new project.</p></div><Link className="btn" href="/admin/catalog?tab=products">Manage products</Link></div><ProductFinder embedded/></>;
 }

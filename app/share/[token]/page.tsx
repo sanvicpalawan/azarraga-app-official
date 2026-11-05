@@ -72,6 +72,7 @@ export default async function SharePage({
             <tr>
               <th>#</th>
               <th>Description</th>
+              <th>Drawing</th>
               <th>Qty</th>
               <th>Unit cost</th>
               <th>Subtotal</th>
@@ -79,22 +80,25 @@ export default async function SharePage({
           </thead>
           <tbody>
             {doc.sections.map((section, sIdx) => {
-              const chosen =
-                doc.acceptedSectionId === section.id ||
-                (!doc.acceptedSectionId && section.kind === "included");
-              if (!chosen && doc.acceptedSectionId) return null;
-              if (!doc.acceptedSectionId && section.kind === "alternative") return null;
+              const chosen = section.kind === "included" || doc.acceptedSectionId === section.id;
+              if (!chosen) return null;
               return (
                 <Fragment key={section.id}>
                   {section.kind === "alternative" && section.title && (
                     <tr className="share-table__group">
-                      <td colSpan={5}>{section.title}</td>
+                      <td colSpan={6}>{section.title}</td>
                     </tr>
                   )}
                   {section.lines.map((line, lIdx) => (
                     <tr key={line.id}>
                       <td>{line.code ?? `${sIdx + 1}.${lIdx + 1}`}</td>
                       <td>{line.description}</td>
+                      <td style={{ width: 120, minWidth: 100, textAlign: "center" }}>
+                        {typeof line.designJson?.previewPng === "string" && line.designJson.previewPng.startsWith("data:image/png;base64,") && (
+                          // eslint-disable-next-line @next/next/no-img-element -- immutable saved drawing data URL
+                          <img src={line.designJson.previewPng} alt={`Drawing for ${line.code ?? line.description}`} style={{ display: "block", width: 120, height: 96, objectFit: "contain", margin: "0 auto" }} />
+                        )}
+                      </td>
                       <td>
                         {Number(line.quantity)} {line.unit}
                       </td>

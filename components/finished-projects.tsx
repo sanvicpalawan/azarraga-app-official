@@ -39,6 +39,8 @@ type Props = {
     lock?: string;
     description?: string;
     imageUrl?: string;
+    sourceProjectId?: number;
+    sourceItemId?: string;
   }) => void;
   onCatalogUpdated: () => Promise<void>;
 };
@@ -284,6 +286,8 @@ export function FinishedProjectsScreen({ onUseInConfigure, onCatalogUpdated }: P
       lock: item.lock,
       description: item.description,
       imageUrl: item.imageDataUrl,
+      sourceProjectId: activeProject?.id,
+      sourceItemId: item.id,
     });
   };
 

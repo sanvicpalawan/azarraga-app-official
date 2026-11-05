@@ -35,6 +35,7 @@ export default async function InvoiceDetailPage({
           </p>
         </div>
         <div className="spacer" />
+        <Link className="btn" href={`/invoices/${doc.id}/edit`}>Edit invoice</Link>
         <ShareMenu
           shareUrl={`/share/${doc.shareToken}`}
           number={doc.number}
@@ -85,6 +86,10 @@ export default async function InvoiceDetailPage({
               {doc.sections.flatMap((s) =>
                 s.lines.map((line) => (
                   <div key={line.id} className="total-line">
+                    {typeof line.designJson?.previewPng === "string" && (
+                      // eslint-disable-next-line @next/next/no-img-element -- immutable item drawing snapshot
+                      <img src={line.designJson.previewPng} alt={`Product drawing ${line.code ?? ""}`} style={{width:100,height:80,objectFit:"contain",flexShrink:0}}/>
+                    )}
                     <span>
                       {line.code ? <strong className="line-code">{line.code}</strong> : null}{" "}
                       {line.description}

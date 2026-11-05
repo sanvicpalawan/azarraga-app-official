@@ -78,6 +78,8 @@ pnpm start
 
 ## Owner quotation workflow
 
+Design Studio now includes a library of original quotation drawings and a reviewed PDF import flow. The same paginated product search and All / Windows / Doors / Others controls are available throughout the owner interface. Search results can be added to the document being edited; prices, quantities, units, descriptions and drawings remain editable. See [product search](docs/shared-product-search.md) and [source product guidance](docs/owner-product-reference.md).
+
 See [AUDIT.md](AUDIT.md) for the one-page audit and [delivery notes](docs/owner-flow-delivery.md) for the updated routes and data compatibility. The owner can create a customer once, add multiple quote lines, enter dimensions in m/mm/fractional feet-inches, review live totals, save, reopen, preview/PDF and share through WhatsApp. Administration is separated at `/admin`; no login is required during this build, as requested by the owner.
 
 Without `DATABASE_URL`, local development uses editable process memory: browser reloads preserve saved quotes, while restarting the server resets them. Production requires the existing Neon `DATABASE_URL`. Do not set `NEXT_PUBLIC_LOCAL_PREVIEW` or `NEXT_PUBLIC_LOCAL_MEMORY` on Vercel. Image and logo storage remain unchanged.

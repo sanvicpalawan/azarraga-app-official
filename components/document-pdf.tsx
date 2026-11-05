@@ -105,6 +105,9 @@ const s = StyleSheet.create({
   cell: { fontSize: 8, lineHeight: 1.35 },
   cItem: { width: 40 },
   cDesc: { flex: 1, paddingRight: 8 },
+  cDrawing: { width: 98, paddingRight: 8, alignItems: "center", justifyContent: "center" },
+  drawing: { width: 90, height: 72, objectFit: "contain" },
+  rowDrawing: { minHeight: 84 },
   cQty: { width: 44, textAlign: "right" },
   cUnit: { width: 66, textAlign: "right" },
   cSub: { width: 74, textAlign: "right" },
@@ -193,7 +196,7 @@ const s = StyleSheet.create({
 });
 
 /* Column widths, kept in one place so head and body cannot drift apart. */
-const COL = { item: 40, desc: 0, qty: 44, unit: 66, sub: 74 };
+const COL = { item: 40, desc: 0, drawing: 98, qty: 44, unit: 66, sub: 74 };
 
 interface LineRow {
   code: string | null;
@@ -202,6 +205,7 @@ interface LineRow {
   unit: string;
   unitPrice: number;
   lineTotal: number;
+  drawing: string | null;
 }
 
 export function DocumentPdf({
@@ -217,9 +221,7 @@ export function DocumentPdf({
 
   // Alternatives: only the section the owner picked (or the included one).
   const shownSections = doc.sections.filter((section) =>
-    doc.acceptedSectionId
-      ? section.id === doc.acceptedSectionId
-      : section.kind === "included",
+    section.kind === "included" || section.id === doc.acceptedSectionId,
   );
 
   const rows: { group: string | null; lines: LineRow[] }[] = [];
@@ -236,6 +238,7 @@ export function DocumentPdf({
         unit: l.unit,
         unitPrice: Number(l.unitPrice),
         lineTotal: Number(l.lineTotal),
+        drawing: typeof l.designJson?.previewPng === "string" && l.designJson.previewPng.startsWith("data:image/png;base64,") ? l.designJson.previewPng : null,
       })),
     });
   });
@@ -263,13 +266,13 @@ export function DocumentPdf({
             )}
             <View>
               <Text style={s.company}>{String(settings.name)}</Text>
-              <Text style={s.address}>{String(settings.address)}</Text>
+              <Text style={s.address}>{settings.address ?? ""}</Text>
             </View>
           </View>
           <Text style={s.headRight}>
-            {String(settings.phone)}
+            {settings.phone ?? ""}
             {"\n"}
-            {String(settings.email)}
+            {settings.email ?? ""}
             {settings.tin ? `\nTIN: ${String(settings.tin)}` : ""}
           </Text>
         </View>
@@ -312,13 +315,14 @@ export function DocumentPdf({
         <View style={s.tableHead} fixed>
           <Text style={[s.th, { width: COL.item }]}>ITEM #</Text>
           <Text style={[s.th, { flex: 1, paddingHorizontal: 8 }]}>DESCRIPTION</Text>
+          <Text style={[s.th, { width: COL.drawing }]}>DRAWING</Text>
           <Text style={[s.th, { width: COL.qty, textAlign: "right" }]}>QTY</Text>
           <Text style={[s.th, { width: COL.unit, textAlign: "right" }]}>UNIT COST</Text>
           <Text style={[s.th, { width: COL.sub, textAlign: "right" }]}>SUBTOTAL</Text>
         </View>
 
         {rows.map((block, bi) => (
-          <View key={`${bi}`} wrap={false}>
+          <View key={`${bi}`}>
             {block.group && (
               <View style={s.groupRow}>
                 <Text style={s.groupText}>{block.group}</Text>
@@ -328,11 +332,17 @@ export function DocumentPdf({
               rowIx += 1;
               const alt = rowIx % 2 === 0;
               return (
-                <View style={[s.row, alt ? s.rowAlt : undefined]} key={`${bi}-${li}`}>
+                <View style={[s.row, alt ? s.rowAlt : undefined, l.drawing ? s.rowDrawing : undefined]} key={`${bi}-${li}`} wrap={false}>
                   <Text style={[s.cell, s.cItem, s.bold]}>
                     {l.code ?? `${bi + 1}.${li + 1}`}
                   </Text>
                   <Text style={[s.cell, s.cDesc]}>{l.description}</Text>
+                  <View style={s.cDrawing}>
+                    {l.drawing && (
+                      // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf has no alt prop
+                      <Image src={l.drawing} style={s.drawing} />
+                    )}
+                  </View>
                   <Text style={[s.cell, s.cQty]}>
                     {l.quantity} {l.unit}
                   </Text>
@@ -422,13 +432,13 @@ export function DocumentPdf({
         {(settings.paymentInstructions as string) ? (
           <View style={[s.termsBox, { marginTop: 10, backgroundColor: "#FFFFFF" }]} wrap={false}>
             <Text style={s.termsTitle}>Payment Instructions</Text>
-            <Text style={s.termsText}>{String(settings.paymentInstructions)}</Text>
+            <Text style={s.termsText}>{settings.paymentInstructions ?? ""}</Text>
           </View>
         ) : null}
 
         <View style={s.foot} fixed>
           <Text>
-            {String(settings.name)} · {String(settings.address)}
+            {settings.name}{settings.address ? ` · ${settings.address}` : ""}
           </Text>
           <Text>
             {doc.number} · {doc.issueDate}

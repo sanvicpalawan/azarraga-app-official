@@ -495,11 +495,11 @@ export function getMemoryBackend(): CatalogBackend {
         };
       },
 
-      async listProjects(): Promise<FinishedProject[]> {
+      async listProjects(options?: {includeFiles?:boolean}): Promise<FinishedProject[]> {
         return getGlobalStore()
           .projects.slice()
           .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-          .map((p) => ({ ...p, items: p.items.map((i) => ({ ...i })) }));
+          .map((p) => ({ ...p, ...(options?.includeFiles === false ? {fileData:""} : {}), items: p.items.map((i) => ({ ...i })) }));
       },
 
       async getProject(id: number): Promise<FinishedProject | undefined> {

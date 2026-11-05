@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { OWNER_NAVIGATION, ownerSection, type CatalogView } from "@/lib/navigation";
+import { ProductFinder } from "@/components/product-finder";
 
 
 /**
@@ -16,6 +17,7 @@ export function AppShell({ children, wide = false, catalogScreen = "catalog" }: 
 
   return (
     <div className="document-shell">
+      <div className="document-topbar">
       <header className="document-header no-print">
         <Link href="/quotes" className="app-brand">
           <img src="/azarraga-logo-full.jpg" alt="Azarraga Glass & Aluminum" width={170} height={44} style={{ objectFit: "contain", background: "#fff", borderRadius: 4, padding: 4 }} />
@@ -31,6 +33,8 @@ export function AppShell({ children, wide = false, catalogScreen = "catalog" }: 
           })}
         </nav>
       </header>
+      <ProductFinder/>
+      </div>
       {process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_LOCAL_PREVIEW === "1" && (
         <div className="inline-note no-print" role="status" style={{ borderRadius: 0, textAlign: "center" }}>
           Layout preview · sample quotes and invoices · changes are not saved

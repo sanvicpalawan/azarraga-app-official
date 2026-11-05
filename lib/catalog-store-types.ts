@@ -169,7 +169,7 @@ export type CatalogBackend = {
   saveQuotation(input: QuotationInput): Promise<Quotation>;
   listQuotations(): Promise<Quotation[]>;
   getOverview(): Promise<Overview>;
-  listProjects(): Promise<FinishedProject[]>;
+  listProjects(options?: {includeFiles?:boolean}): Promise<FinishedProject[]>;
   getProject(id: number): Promise<FinishedProject | undefined>;
   saveProject(input: FinishedProjectInput): Promise<FinishedProject>;
   deleteProject(id: number): Promise<boolean>;

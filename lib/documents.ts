@@ -440,7 +440,7 @@ export async function createDocument(draft: DocumentDraft): Promise<string> {
       type,
       number,
       revision: 0,
-      status: draft.status ?? "draft",
+      status: draft.status ?? (type === "invoice" ? "unpaid" : "draft"),
       clientId,
       projectName: draft.projectName ?? null,
       projectAddress: draft.projectAddress ?? null,
@@ -526,7 +526,7 @@ export async function saveDocument(id: string, draft: DocumentDraft): Promise<Do
       total: totals.total,
       notes: draft.notes ?? current.notes,
       terms: draft.terms ?? current.terms,
-      status: current.status,
+      status: current.type === "invoice" && current.status !== "void" ? paymentStatus(totals.total, Number(current.amountPaid)) : current.status,
       updatedAt: new Date(),
     })
     .where(eq(documents.id, id)).toSQL();

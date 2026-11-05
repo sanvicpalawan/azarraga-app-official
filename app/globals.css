@@ -2161,3 +2161,11 @@ button { cursor: pointer; }
   .document-header { display: none; }
   .app-main, .app-main--wide { max-width: none; padding: 0; margin: 0; }
 }
+
+.quote-line-drawing { display:flex; align-items:center; gap:18px; border:1px solid #d7e1ec; background:linear-gradient(90deg,#eaf2fa,#fff); border-radius:12px; padding:14px; margin-bottom:14px; }
+.quote-line-drawing img,.quote-drawing-empty { width:160px;height:110px;object-fit:contain;flex-shrink:0;background:#fff;border:1px solid #c8d6e5;border-radius:8px; }
+.quote-drawing-empty { display:grid;place-content:center;color:#607188;font-size:.8rem;text-align:center; }
+.quote-line-drawing .btn { margin-top:10px; }
+.quote-drawing-modal { position:fixed;inset:0;z-index:100;background:rgba(8,42,71,.65);padding:20px;overflow:auto; }
+.quote-drawing-dialog { max-width:1600px;margin:0 auto;background:#f4f7fb;border:1px solid #c6d6e5;border-radius:16px;padding:24px; }
+@media(max-width:620px){.quote-drawing-modal{padding:6px}.quote-drawing-dialog{padding:14px}.quote-line-drawing{align-items:flex-start;gap:10px}.quote-line-drawing img,.quote-drawing-empty{width:104px;height:90px}}
