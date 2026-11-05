@@ -67,7 +67,7 @@ export default async function SharePage({
           </div>
         </div>
 
-        <table className="share-table">
+        <table className="share-table" role="table">
           <thead>
             <tr>
               <th>#</th>
@@ -91,19 +91,19 @@ export default async function SharePage({
                   )}
                   {section.lines.map((line, lIdx) => (
                     <tr key={line.id}>
-                      <td>{line.code ?? `${sIdx + 1}.${lIdx + 1}`}</td>
-                      <td>{line.description}</td>
-                      <td style={{ width: 120, minWidth: 100, textAlign: "center" }}>
+                      <td data-label="Item">{line.code ?? `${sIdx + 1}.${lIdx + 1}`}</td>
+                      <td data-label="Description">{line.description}</td>
+                      <td data-label="Drawing" className="share-table__drawing">
                         {typeof line.designJson?.previewPng === "string" && line.designJson.previewPng.startsWith("data:image/png;base64,") && (
                           // eslint-disable-next-line @next/next/no-img-element -- immutable saved drawing data URL
                           <img src={line.designJson.previewPng} alt={`Drawing for ${line.code ?? line.description}`} style={{ display: "block", width: 120, height: 96, objectFit: "contain", margin: "0 auto" }} />
                         )}
                       </td>
-                      <td>
+                      <td data-label="Quantity">
                         {Number(line.quantity)} {line.unit}
                       </td>
-                      <td>{formatMoney(Number(line.unitPrice), doc.currency)}</td>
-                      <td>{formatMoney(Number(line.lineTotal), doc.currency)}</td>
+                      <td data-label="Unit cost">{formatMoney(Number(line.unitPrice), doc.currency)}</td>
+                      <td data-label="Subtotal">{formatMoney(Number(line.lineTotal), doc.currency)}</td>
                     </tr>
                   ))}
                 </Fragment>

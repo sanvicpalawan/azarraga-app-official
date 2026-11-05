@@ -2170,3 +2170,43 @@ button { cursor: pointer; }
 .quote-drawing-modal { position:fixed;inset:0;z-index:100;background:rgba(8,42,71,.65);padding:20px;overflow:auto; }
 .quote-drawing-dialog { max-width:1600px;margin:0 auto;background:#f4f7fb;border:1px solid #c6d6e5;border-radius:16px;padding:24px; }
 @media(max-width:620px){.quote-drawing-modal{padding:6px}.quote-drawing-dialog{padding:14px}.quote-line-drawing{align-items:flex-start;gap:10px}.quote-line-drawing img,.quote-drawing-empty{width:104px;height:90px}}
+
+
+.share-table__drawing { width: 120px; min-width: 100px; text-align: center; }
+/* On phones each product is one labelled card. Screen-only keeps print tables intact. */
+@media screen and (max-width: 720px) {
+  .share-table, .quote-table, .admin-table,
+  .share-table tbody, .quote-table tbody, .admin-table tbody {
+    display: block; width: 100%; min-width: 0; max-width: 100%;
+  }
+  .share-table thead, .quote-table thead, .admin-table thead { display: none; }
+  .share-table tr, .quote-table tr, .admin-table tr {
+    display: block; width: 100%; min-width: 0; margin-bottom: 14px;
+    border: 1px solid var(--az-line); border-radius: 10px; overflow: hidden;
+    padding: 4px 12px; background: #fff;
+  }
+  .share-table td, .quote-table td, .admin-table td {
+    display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 8px;
+    width: auto; min-width: 0; max-width: 100%; padding: 10px 0;
+    border: 0; border-bottom: 1px solid #e5edf4; text-align: left !important;
+    overflow-wrap: anywhere; white-space: normal;
+  }
+  .share-table td::before, .quote-table td::before, .admin-table td::before {
+    content: attr(data-label); color: #607188; font-size: .66rem;
+    font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+  }
+  .share-table td > *, .quote-table td > *, .admin-table td > * { grid-column: 2; min-width: 0; max-width: 100%; }
+  .share-table td:last-child, .quote-table td:last-child, .admin-table td:last-child { border-bottom: 0; }
+  .share-table__group td { display: block; }
+  .share-table__group td::before { content: none; }
+  .share-table td img, .quote-table td img { margin: 0 !important; object-fit: contain; }
+  .admin-table-wrap, .quote-table-wrap { overflow: visible; min-width: 0; }
+  .app-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; overflow: visible; }
+  .app-nav a { justify-content: center; min-width: 0; min-height: 36px; padding: 7px 4px; font-size: .7rem; white-space: normal; text-align: center; border-radius: 8px; }
+  .document-header { flex-wrap: wrap; padding: 8px 16px; gap: 8px; }
+  .catalog-shell .admin-tabs, .admin-tabs, .category-tabs { flex-wrap: wrap; overflow: visible; }
+  .banner-stats { flex-wrap: wrap; overflow: visible; }
+}
+@media screen and (max-width: 360px) {
+  .app-nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

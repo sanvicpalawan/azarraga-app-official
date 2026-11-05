@@ -11,3 +11,5 @@ Studio import deduplication uses lightweight file fingerprints and counts instea
 The original PDF drawings are reusable images. Editable panel models are a separate capability: the source image is available beside Studio's drawing tools, and owner-created models retain their editable JSON and SVG on document lines. Automatic reconstruction of arbitrary imported pictures into editable panel geometry is not implemented.
 
 No new environment variables, storage services or authentication are required. Production continues to use the existing DATABASE_URL. Local memory is temporary and should not be enabled on Vercel.
+
+On phones, quotation/invoice item tables and admin product tables become labelled cards; navigation wraps into rows. These screen-only rules leave print/PDF tables intact. The PDF endpoint explicitly traces PDFKit's dynamically loaded CommonJS font modules alongside the Noto Sans peso fonts and official logo. After a production build, run `node scripts/verify-pdf-trace.mjs` to verify those deployment assets before publishing.
