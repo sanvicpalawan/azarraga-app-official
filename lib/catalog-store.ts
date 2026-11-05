@@ -174,7 +174,9 @@ export async function getProject(id: number): Promise<FinishedProject | undefine
 }
 
 export async function saveProject(input: FinishedProjectInput): Promise<FinishedProject> {
-  return getStore().saveProject(input);
+  const saved = await getStore().saveProject(input);
+  try { await (await import("./assistant/service")).onSourceSaved(saved); } catch { console.error("Assistant could not queue this source; the original project was saved successfully."); }
+  return saved;
 }
 
 export async function deleteProject(id: number): Promise<boolean> {

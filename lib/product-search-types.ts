@@ -8,7 +8,7 @@ export type ProductSearchHit = {
   sourceProjectId?: number; sourceItemId?: string; productId?: number;
   sourceName: string | null; sourceFile: string | null; sourceNumber: string | null;
   sourceDate: string | null; reviewRequired: boolean;
-  series?: string; glass?: string; finish?: string;
+  series?: string; glass?: string; finish?: string; productType?: string;
   itemCode?: string;
 };
 export type ProductSearchPage = { items: ProductSearchHit[]; total: number; page: number; pageSize: number; totalPages: number };
