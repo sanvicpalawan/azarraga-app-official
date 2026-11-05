@@ -5,7 +5,7 @@ import { decryptKey } from "./key-crypto";
 
 const BASE = "https://openrouter.ai/api/v1";
 export class AssistantError extends Error {
-  constructor(message: string, public waiting = false, public retrySeconds = 300, public outputLimited = false) { super(message); }
+  constructor(message: string, public waiting = false, public retrySeconds = 300, public outputLimited = false, public jobOnly = false) { super(message); }
 }
 export async function assistantKey() {
   const config = await readConfig();
@@ -76,6 +76,6 @@ export async function callFreeModel(modelId: string, instruction: string, conten
   if (choice?.finish_reason === "length") throw new AssistantError("The free model used its output allowance before finishing. Retrying a smaller batch; no source data was changed.", true, 60, true);
   const contentValue = choice?.message?.content;
   const text = Array.isArray(contentValue) ? contentValue.filter(part => part?.type === "text" && typeof part.text === "string").map(part => part.text).join("") : contentValue;
-  if (typeof text !== "string" || !text.trim()) throw new AssistantError(`The free model returned no product data (${String(choice?.finish_reason ?? "empty response")}). Try another free model.`);
-  try { return parseJsonReply(text); } catch { throw new AssistantError("The model returned invalid JSON. Original data has not been changed."); }
+  if (typeof text !== "string" || !text.trim()) throw new AssistantError(`The free model returned no product data (${String(choice?.finish_reason ?? "empty response")}). Try another free model.`, false, 300, false, true);
+  try { return parseJsonReply(text); } catch { throw new AssistantError("The model returned invalid JSON. Original data has not been changed.", false, 300, false, true); }
 }

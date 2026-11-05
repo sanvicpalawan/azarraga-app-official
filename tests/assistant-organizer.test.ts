@@ -55,3 +55,16 @@ test("six real source items resume across batches and remain unchanged when labe
  const second=await runNextJob();expect(second?.cursor).toBe(6);expect(second?.status).toBe("review");expect(second?.proposals[0].similar.length).toBeGreaterThan(0);
  await applyJob(second!.id);expect((await getProject(source.id))?.items).toEqual(source.items);expect((await productMetadata()).filter(m=>m.projectId===source.id)).toHaveLength(6);
 });
+
+test("invalid document fields do not mark a healthy connection offline or block the next document",async()=>{
+ vi.stubEnv("OPENROUTER_API_KEY","test-key");const model={id:"quality/window:free",name:"Free",vision:false,contextLength:32000};await patchConfig({selectedModel:model.id,models:[model]});
+ vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>{
+  if(url.endsWith('/models'))return Response.json({data:[{...model,pricing:{prompt:"0",completion:"0"},architecture:{input_modalities:["text"],output_modalities:["text"]}}]});
+  const input=JSON.parse(JSON.parse(String(init?.body)).messages[1].content[0].text);
+  return Response.json({choices:[{message:{content:JSON.stringify({items:input.items.map((i:{id:string;widthMm:number;heightMm:number})=>({...proposal,id:i.id,category:input.file==='uncertain.pdf'?'UNKNOWN':'Windows',widthMm:i.widthMm,heightMm:i.heightMm}))})}}],usage:{cost:0}});
+ }));
+ await activateAssistant();
+ for(const fileName of ['uncertain.pdf','valid.pdf']){const source=await saveProject({projectName:fileName,clientName:'Owner',projectAddress:'',invoiceNumber:'QA',invoiceDate:'2026-11-05',totalAmount:5000,fileName,fileType:'application/pdf',fileSize:1,items:[item],status:'historical'});await enqueueProject(source);}
+ const first=await runNextJob();expect(first?.status).toBe('failed');expect(first?.error).toContain('category');expect((await assistantStatus()).connection).toBe('active');
+ expect((await runNextJob())?.cursor).toBe(1);
+});

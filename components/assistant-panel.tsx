@@ -44,7 +44,7 @@ export function DataOrganizer({ compact = false }: { compact?: boolean }) {
       while (!stop.current) {
         const next = await request({ action: "run" }); if (!alive.current) break; setData(next);
         const result = next.result as AssistantJob | null;
-        if (!result || result.status === "failed" || result.retryAt || !["active", "waiting"].includes(next.config.connection)) break;
+        if (!result || result.retryAt || !["active", "waiting"].includes(next.config.connection)) break;
       }
     } catch (error) { if (alive.current) setError(error instanceof Error ? error.message : "Processing paused."); }
     finally { working.current = false; if (alive.current) setRunning(false); }
