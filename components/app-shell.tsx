@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { OWNER_NAVIGATION, ownerSection, type CatalogView } from "@/lib/navigation";
 import { ProductFinder } from "@/components/product-finder";
 
@@ -14,10 +14,23 @@ import { ProductFinder } from "@/components/product-finder";
  */
 export function AppShell({ children, wide = false, catalogScreen = "catalog" }: { children: ReactNode; wide?: boolean; catalogScreen?: CatalogView }) {
   const pathname = usePathname();
+  const shellRef = useRef<HTMLDivElement>(null);
+  const topbarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const shell = shellRef.current;
+    const topbar = topbarRef.current;
+    if (!shell || !topbar) return;
+    const measure = () => shell.style.setProperty("--app-topbar-height", `${topbar.getBoundingClientRect().height}px`);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(topbar);
+    return () => observer.disconnect();
+  }, []);
 
   return (
-    <div className="document-shell">
-      <div className="document-topbar">
+    <div className="document-shell" ref={shellRef}>
+      <div className="document-topbar" ref={topbarRef}>
       <header className="document-header no-print">
         <Link href="/quotes" className="app-brand">
           <img src="/azarraga-logo-full.jpg" alt="Azarraga Glass & Aluminum" width={170} height={44} style={{ objectFit: "contain", background: "#fff", borderRadius: 4, padding: 4 }} />

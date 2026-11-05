@@ -83,7 +83,7 @@ export default async function InvoiceDetailPage({
               <h2>Items</h2>
             </div>
             <div style={{ display: "grid", gap: 9 }}>
-              {doc.sections.flatMap((s) =>
+              {doc.sections.filter((s) => s.kind === "included" || s.id === doc.acceptedSectionId).flatMap((s) =>
                 s.lines.map((line) => (
                   <div key={line.id} className="total-line">
                     {typeof line.designJson?.previewPng === "string" && (
@@ -127,8 +127,8 @@ export default async function InvoiceDetailPage({
                 <strong>{formatMoney(doc.total, doc.currency)}</strong>
               </div>
               <div className="total-line total-line--deposit">
-                <span>{Number(doc.depositPercent)}% due now ({formatMoney(deposit, doc.currency)})</span>
-                <strong>{formatMoney(Math.max(doc.total - doc.amountPaid, 0), doc.currency)}</strong>
+                <span>{Number(doc.depositPercent)}% down payment</span>
+                <strong>{formatMoney(deposit, doc.currency)}</strong>
               </div>
             </div>
           </section>

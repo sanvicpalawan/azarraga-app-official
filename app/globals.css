@@ -2,7 +2,8 @@
 @import "tw-animate-css";
 @import "../vendor/shadcn-tailwind-4.13.0.css";
 
-html, body { max-width: 100%; overflow-x: hidden; }
+/* clip prevents horizontal spill without creating a scroll container that breaks sticky navigation. */
+html, body { max-width: 100%; overflow-x: clip; }
 
 :root {
   --background: #f3f6fa;
@@ -2113,7 +2114,7 @@ button { cursor: pointer; }
   .app-nav a:focus-visible, .rail-link:focus-visible, .mobile-nav button:focus-visible {
     outline: 2px solid #e8ae3c; outline-offset: -2px;
   }
-  .editor__side { top: 92px; }
+  .editor__side { top: calc(var(--app-topbar-height, 140px) + 16px); }
   .catalog-shell .projects-workspace-grid { grid-template-columns: minmax(240px, .75fr) minmax(0, 1.5fr); }
 }
 
