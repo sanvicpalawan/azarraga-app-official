@@ -24,3 +24,12 @@ test("rate limits remain waiting and never invoke a different model",async()=>{
 test("invalid model text is rejected instead of used as organization data",()=>{
  expect(parseJsonReply('```json\n{"items":[]}\n```')).toEqual({items:[]});expect(()=>parseJsonReply('do something else')).toThrow();
 });
+
+test("reasoning models reserve room for JSON and report exhausted output without using reasoning as data",async()=>{
+ vi.stubEnv("OPENROUTER_API_KEY","test-key");let body:Record<string,unknown>={};
+ vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>{
+  if(url.endsWith('/models'))return Response.json({data:[{...model,supported_parameters:["reasoning"],top_provider:{max_completion_tokens:16000}}]});
+  body=JSON.parse(String(init?.body));return Response.json({choices:[{finish_reason:"length",message:{content:null,reasoning:"private reasoning"}}],usage:{cost:0}});
+ }));
+ await expect(callFreeModel(model.id,"test",[])).rejects.toMatchObject({outputLimited:true});expect(body.max_tokens).toBe(8192);expect(body.reasoning).toEqual({effort:"low",exclude:true});
+});

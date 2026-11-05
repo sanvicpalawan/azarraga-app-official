@@ -5,7 +5,7 @@ import { decryptKey } from "./key-crypto";
 
 const BASE = "https://openrouter.ai/api/v1";
 export class AssistantError extends Error {
-  constructor(message: string, public waiting = false, public retrySeconds = 300) { super(message); }
+  constructor(message: string, public waiting = false, public retrySeconds = 300, public outputLimited = false) { super(message); }
 }
 export async function assistantKey() {
   const config = await readConfig();
@@ -28,7 +28,8 @@ export function freeModels(rows: unknown[]): FreeModel[] {
     if (!(id.endsWith(":free") || id === "openrouter/free") || !price || price.prompt == null || price.completion == null) return [];
     if (Object.values(price).some(cost => cost == null || String(cost).trim() === "" || !Number.isFinite(Number(cost)) || Number(cost) !== 0)) return [];
     if (!architecture?.input_modalities?.includes("text") || !architecture.output_modalities?.includes("text")) return [];
-    return [{ id, name: String(row.name ?? id), vision: architecture.input_modalities.includes("image"), contextLength: Number(row.context_length ?? 0) }];
+    const top = row.top_provider as { max_completion_tokens?: number } | undefined;
+    return [{ id, name: String(row.name ?? id), vision: architecture.input_modalities.includes("image"), contextLength: Number(row.context_length ?? 0), maxCompletionTokens: Number(top?.max_completion_tokens) || 8192, supportsReasoning: Array.isArray(row.supported_parameters) && row.supported_parameters.includes("reasoning") }];
   }).sort((a, b) => a.name.localeCompare(b.name));
 }
 async function responseError(response: Response): Promise<never> {
@@ -61,7 +62,8 @@ export async function callFreeModel(modelId: string, instruction: string, conten
     response = await fetch(`${BASE}/chat/completions`, {
       method: "POST", signal: AbortSignal.timeout(30000),
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-OpenRouter-Title": "Azarraga Data Assistant" },
-      body: JSON.stringify({ model: model.id, max_tokens: 3500,
+      body: JSON.stringify({ model: model.id, max_tokens: Math.min(model.maxCompletionTokens ?? 8192, 8192),
+        ...(model.supportsReasoning ? { reasoning: { effort: "low", exclude: true } } : {}),
         provider: { allow_fallbacks: false, max_price: { prompt: 0, completion: 0, request: 0, image: 0 } },
         messages: [{ role: "system", content: instruction }, { role: "user", content }],
       }),
@@ -70,7 +72,10 @@ export async function callFreeModel(modelId: string, instruction: string, conten
   if (!response.ok) return responseError(response);
   const body = await response.json();
   if (Number(body.usage?.cost ?? 0) > 0) throw new AssistantError("Unexpected provider pricing report. Assistant stopped; check OpenRouter usage before continuing.");
-  const text = body.choices?.[0]?.message?.content;
-  if (typeof text !== "string") throw new AssistantError("The model returned no usable organization data. Try another free model.");
+  const choice = body.choices?.[0];
+  if (choice?.finish_reason === "length") throw new AssistantError("The free model used its output allowance before finishing. Retrying a smaller batch; no source data was changed.", true, 60, true);
+  const contentValue = choice?.message?.content;
+  const text = Array.isArray(contentValue) ? contentValue.filter(part => part?.type === "text" && typeof part.text === "string").map(part => part.text).join("") : contentValue;
+  if (typeof text !== "string" || !text.trim()) throw new AssistantError(`The free model returned no product data (${String(choice?.finish_reason ?? "empty response")}). Try another free model.`);
   try { return parseJsonReply(text); } catch { throw new AssistantError("The model returned invalid JSON. Original data has not been changed."); }
 }

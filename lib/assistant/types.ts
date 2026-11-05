@@ -1,4 +1,4 @@
-export type FreeModel = { id: string; name: string; vision: boolean; contextLength: number };
+export type FreeModel = { id: string; name: string; vision: boolean; contextLength: number; maxCompletionTokens?: number; supportsReasoning?: boolean };
 export type AssistantConfig = {
   selectedModel: string; models: FreeModel[]; refreshedAt: string | null;
   connection: "inactive" | "active" | "waiting" | "error";
@@ -16,6 +16,6 @@ export type AssistantJob = {
   id: string; projectId: number; title: string; fingerprint: string;
   status: "waiting" | "processing" | "ready" | "review" | "applied" | "failed" | "discarded";
   cursor: number; total: number; proposals: Organization[]; error: string;
-  model: string; retryAt: string | null; updatedAt: string; lockToken?: string;
+  model: string; retryAt: string | null; updatedAt: string; lockToken?: string; batchSize?: number;
 };
 export type AssistantMetadata = Organization & { projectId: number; fingerprint: string; jobId: string };

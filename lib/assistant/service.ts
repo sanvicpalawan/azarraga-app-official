@@ -93,9 +93,10 @@ export async function runNextJob() {
   try {
     const project = await sourceProject(job.projectId);
     if (!project || sourceFingerprint(project) !== job.fingerprint) throw new AssistantError("Source document changed. Queue its current version before organizing it.");
-    const items = project.items.slice(job.cursor, job.cursor + 5);
+    const items = project.items.slice(job.cursor, job.cursor + (job.batchSize ?? 5));
     const model = (await readConfig()).models.find(model => model.id === status.selectedModel);
-    const content: unknown[] = [{ type: "text", text: JSON.stringify({ file: project.fileName, sourceNotes: project.notes?.split("SOURCE_TEXT:")[1]?.slice(0, 4000) ?? "", items: items.map(item => ({ id: item.id, name: item.name, description: item.description, category: item.category, series: item.series, glass: item.glass, finish: item.color, widthMm: item.widthM == null ? null : Math.round(item.widthM * 1000), heightMm: item.heightM == null ? null : Math.round(item.heightM * 1000), hasOriginalDrawing: Boolean(item.imageDataUrl) })) }) }];
+    const approvedExamples = (await productMetadata()).filter(example => items.some(item => item.category === example.category)).slice(-3).map(example => ({ name: example.name, description: example.description, productType: example.productType, category: example.category, series: example.series, glass: example.glass, finish: example.finish }));
+    const content: unknown[] = [{ type: "text", text: JSON.stringify({ file: project.fileName, approvedExamples, exampleRule: "Owner-approved examples guide terminology only. Never copy their specifications into a new item unless its own source confirms them.", sourceNotes: project.notes?.split("SOURCE_TEXT:")[1]?.slice(0, 4000) ?? "", items: items.map(item => ({ id: item.id, name: item.name, description: item.description, category: item.category, series: item.series, glass: item.glass, finish: item.color, widthMm: item.widthM == null ? null : Math.round(item.widthM * 1000), heightMm: item.heightM == null ? null : Math.round(item.heightM * 1000), hasOriginalDrawing: Boolean(item.imageDataUrl) })) }) }];
     if (model?.vision) for (const item of items) if (item.imageDataUrl?.startsWith("data:image/png;base64,")) content.push({ type: "text", text: `Original drawing for ${item.id}` }, { type: "image_url", image_url: { url: item.imageDataUrl } });
     const proposals = await similarProducts(project, validateOrganizations(await callFreeModel(status.selectedModel, INSTRUCTION, content), items));
     job.proposals.push(...proposals); job.cursor += items.length; job.model = status.selectedModel; job.error = ""; job.retryAt = null;
@@ -104,6 +105,10 @@ export async function runNextJob() {
     if ((await readConfig()).selectedModel === status.selectedModel) await patchConfig({ connection: "active", testedAt: new Date().toISOString(), message: "Activated. Most recent organization request succeeded." });
     return job;
   } catch (error) {
+    if (error instanceof AssistantError && error.outputLimited) {
+      if ((job.batchSize ?? 5) > 1) job.batchSize = Math.max(1, Math.floor((job.batchSize ?? 5) / 2));
+      else error = new AssistantError("This free model could not finish even one product. Choose another free model, activate it, then Re-analyze this document.");
+    }
     job.error = error instanceof AssistantError ? error.message : "Organization could not be validated. Original data is unchanged.";
     job.status = error instanceof AssistantError && error.waiting ? "waiting" : "failed";
     job.retryAt = error instanceof AssistantError && error.waiting ? new Date(Date.now() + error.retrySeconds * 1000).toISOString() : null;
